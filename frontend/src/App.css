@@ -1,0 +1,30 @@
+.App {
+  width: 100%;
+}
+
+.App-header {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+  margin-bottom: 0.5em;
+}
+
+.status {
+  font-size: 1.2em;
+  color: #646cff;
+  margin: 1em 0;
+}
+
+.message {
+  font-size: 1em;
+  color: #888;
+  font-style: italic;
+}
