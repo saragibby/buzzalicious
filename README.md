@@ -34,6 +34,7 @@ buzzalicious/
 - Node.js >= 18.0.0
 - npm >= 9.0.0
 - PostgreSQL 14+ (installed and running)
+- Google Cloud Console account (for OAuth)
 
 ### Installation
 
@@ -48,7 +49,18 @@ cd buzzalicious
 npm install
 ```
 
-3. Set up PostgreSQL database:
+3. **Set up Google OAuth:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing one
+   - Enable Google+ API
+   - Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID"
+   - Application type: Web application
+   - Authorized redirect URIs:
+     - `http://localhost:3001/auth/google/callback` (development)
+     - `https://your-app.herokuapp.com/auth/google/callback` (production)
+   - Save the Client ID and Client Secret
+
+4. Set up PostgreSQL database:
 ```bash
 # Create a PostgreSQL database named 'buzzalicious'
 # Using psql:
@@ -60,26 +72,29 @@ CREATE DATABASE buzzalicious;
 createdb buzzalicious
 ```
 
-4. Set up environment variables:
+5. Set up environment variables:
 ```bash
 # Backend
 cp backend/.env.example backend/.env
 
-# Edit backend/.env and update DATABASE_URL with your PostgreSQL credentials:
-# DATABASE_URL="postgresql://username:password@localhost:5432/buzzalicious?schema=public"
+# Edit backend/.env and update with your values:
+# - DATABASE_URL with your PostgreSQL credentials
+# - GOOGLE_CLIENT_ID from Google Cloud Console
+# - GOOGLE_CLIENT_SECRET from Google Cloud Console
+# - SESSION_SECRET (generate a random string)
 
 # Frontend
 cp frontend/.env.example frontend/.env
 ```
 
-5. Run database migrations:
+6. Run database migrations:
 ```bash
 cd backend
 npm run prisma:migrate
 # Follow the prompts to name your migration (e.g., "init")
 ```
 
-6. (Optional) Seed the database with sample data:
+7. (Optional) Seed the database with sample data:
 ```bash
 npm run db:seed
 ```
@@ -128,14 +143,58 @@ npx serve -s dist
 
 ## API Endpoints
 
-### Backend (http://localhost:3001)
+### Authentication
+- `GET /auth/google` - Initiate Google OAuth login
+- `GET /auth/google/callback` - Google OAuth callback
+- `GET /auth/logout` - Logout current user
+- `GET /auth/me` - Get current user info (protected)
+
+### Backend API (http://localhost:3001)
 - `GET /api` - Welcome message
 - `GET /api/health` - Health check
-- `GET /api/users` - Get all users with their posts
-- `GET /api/posts` - Get all published posts
+- `GET /api/users` - Get all users with their templates (protected)
+- `GET /api/templates` - Get all published templates (protected)
 
 ### Frontend (http://localhost:3000)
-- Frontend automatically proxies `/api` requests to the backend
+- Frontend automatically proxies `/api` and `/auth` requests to the backend
+
+## Authentication Flow
+
+1. User clicks "Sign in with Google" button
+2. Redirected to Google for authentication
+3. After successful authentication, redirected back to app
+4. User session is created and stored
+5. Protected routes now accessible
+
+## Deployment to Heroku
+
+### Initial Setup
+```bash
+# Create Heroku app
+heroku create your-app-name
+
+# Add PostgreSQL
+heroku addons:create heroku-postgresql:essential-0
+
+# Set environment variables
+heroku config:set NODE_ENV=production
+heroku config:set SESSION_SECRET=your-random-secret
+heroku config:set GOOGLE_CLIENT_ID=your-google-client-id
+heroku config:set GOOGLE_CLIENT_SECRET=your-google-client-secret
+heroku config:set GOOGLE_CALLBACK_URL=https://your-app.herokuapp.com/auth/google/callback
+```
+
+### Deploy
+```bash
+git push heroku main
+
+# Run migrations
+heroku run npm run prisma:migrate --workspace=backend
+```
+
+### Update Google OAuth
+Add Heroku callback URL to Google Cloud Console:
+- `https://your-app.herokuapp.com/auth/google/callback`
 
 ## Database Management
 

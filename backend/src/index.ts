@@ -1,8 +1,11 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import session from 'express-session';
 import prisma from './db';
 import path from 'path';
+import passportConfig from './auth';
+import { isAuthenticated } from './middleware/auth';
 
 dotenv.config();
 
@@ -10,9 +13,31 @@ const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session configuration
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
+
+// Passport initialization
+app.use(passportConfig.initialize());
+app.use(passportConfig.session());
 
 // Serve static files from frontend build (production only)
 if (process.env.NODE_ENV === 'production') {
@@ -44,8 +69,37 @@ app.get('/api', (_req: Request, res: Response) => {
   res.json({ message: 'Welcome to Buzzalicious API' });
 });
 
-// Database endpoints
-app.get('/api/users', async (_req: Request, res: Response) => {
+// Auth routes
+app.get('/auth/google',
+  passportConfig.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback',
+  passportConfig.authenticate('google', { failureRedirect: '/' }),
+  (_req: Request, res: Response) => {
+    // Successful authentication
+    const redirectUrl = process.env.NODE_ENV === 'production' 
+      ? '/' 
+      : process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(redirectUrl);
+  }
+);
+
+app.get('/auth/logout', (req: Request, res: Response) => {
+  req.logout((err: any) => {
+    if (err) {
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    return res.json({ message: 'Logged out successfully' });
+  });
+});
+
+app.get('/auth/me', isAuthenticated, (req: Request, res: Response) => {
+  res.json(req.user);
+});
+
+// Database endpoints (protected)
+app.get('/api/users', isAuthenticated, async (_req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
       include: {
@@ -59,7 +113,7 @@ app.get('/api/users', async (_req: Request, res: Response) => {
   }
 });
 
-app.get('/api/templates', async (_req: Request, res: Response) => {
+app.get('/api/templates', isAuthenticated, async (_req: Request, res: Response) => {
   try {
     const templates = await prisma.template.findMany({
       include: {
