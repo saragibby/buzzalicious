@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import prisma from './db';
+import path from 'path';
 
 dotenv.config();
 
@@ -13,7 +14,28 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files from frontend build (production only)
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendPath));
+}
+
 // Routes
+app.get('/', (_req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+  } else {
+    res.json({ 
+      message: 'Welcome to Buzzalicious API',
+      endpoints: {
+        health: '/api/health',
+        users: '/api/users',
+        templates: '/api/templates'
+      }
+    });
+  }
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Backend is running' });
 });
@@ -53,6 +75,13 @@ app.get('/api/templates', async (_req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
 });
+
+// Catch-all route for SPA (must be after API routes)
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+  });
+}
 
 // Start server
 const server = app.listen(PORT, () => {
