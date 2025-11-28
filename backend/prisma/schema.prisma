@@ -12,16 +12,36 @@ datasource db {
 
 // Example model - you can modify or add more models here
 model User {
-  id        String     @id @default(uuid())
-  email     String     @unique
-  name      String?
-  googleId  String?    @unique
-  picture   String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  templates Template[]
+  id                  String              @id @default(uuid())
+  email               String              @unique
+  name                String?
+  googleId            String?             @unique
+  picture             String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  templates           Template[]
+  socialAccounts      SocialAccount[]
+  generationRequests  GenerationRequest[]
 
   @@map("users")
+}
+
+model SocialAccount {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform      String   // 'twitter', 'facebook', 'instagram', 'linkedin', 'tiktok', etc.
+  accountName   String   // Display name or handle
+  accountId     String?  // Platform-specific account ID
+  accessToken   String?  // Encrypted access token
+  refreshToken  String?  // Encrypted refresh token
+  tokenExpiry   DateTime?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, platform, accountName])
+  @@map("social_accounts")
 }
 
 model Template {
@@ -34,4 +54,17 @@ model Template {
   updatedAt DateTime @updatedAt
 
   @@map("templates")
+}
+
+model GenerationRequest {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String   // 'openai', 'gemini', 'azure'
+  prompt      String   @db.Text
+  response    String   @db.Text
+  contentType String   // 'text', 'image', 'video'
+  createdAt   DateTime @default(now())
+
+  @@map("generation_requests")
 }

@@ -7,6 +7,8 @@ import path from 'path';
 import passportConfig from './auth';
 import { isAuthenticated } from './middleware/auth';
 import aiRoutes from './routes/ai.routes';
+import profileRoutes from './routes/profile.routes';
+import socialRoutes from './routes/social.routes';
 
 dotenv.config();
 
@@ -101,6 +103,12 @@ app.get('/auth/me', isAuthenticated, (req: Request, res: Response) => {
 
 // AI routes
 app.use('/api/ai', aiRoutes);
+
+// Profile routes
+app.use('/api/profile', isAuthenticated, profileRoutes);
+
+// Social media routes
+app.use('/api/social', isAuthenticated, socialRoutes);
 
 // Database endpoints (protected)
 app.get('/api/users', isAuthenticated, async (_req: Request, res: Response) => {

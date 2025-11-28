@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { AIGenerator } from './components/AIGenerator'
+import { Profile } from './components/Profile'
+import logo from './logo.png'
 
 interface User {
   id: string;
@@ -12,6 +14,7 @@ interface User {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'generator' | 'profile'>('generator');
 
   useEffect(() => {
     // Check if user is logged in
@@ -61,8 +64,10 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>🐝 Buzzalicious</h1>
-        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <img src={logo} alt="Buzzalicious Logo" className="app-logo" style={{ width: '190px' }} />
+          <h1>Buzzalicious</h1>
+        </div>
         {user ? (
           <div className="user-profile">
             {user.picture && (
@@ -93,7 +98,27 @@ function App() {
         )}
       </header>
 
-      {user && <AIGenerator />}
+      {user && (
+        <>
+          <nav className="tab-navigation">
+            <button 
+              className={`tab-button ${activeTab === 'generator' ? 'active' : ''}`}
+              onClick={() => setActiveTab('generator')}
+            >
+              🤖 AI Generator
+            </button>
+            <button 
+              className={`tab-button ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => setActiveTab('profile')}
+            >
+              👤 Profile & Accounts
+            </button>
+          </nav>
+
+          {activeTab === 'generator' && <AIGenerator />}
+          {activeTab === 'profile' && <Profile />}
+        </>
+      )}
     </div>
   )
 }

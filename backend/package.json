@@ -26,7 +26,8 @@
     "express-session": "^1.17.3",
     "openai": "^4.24.1",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
+    "passport-google-oauth20": "^2.0.0",
+    "twitter-api-v2": "^1.28.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
