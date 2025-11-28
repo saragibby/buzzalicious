@@ -6,6 +6,7 @@ import prisma from './db';
 import path from 'path';
 import passportConfig from './auth';
 import { isAuthenticated } from './middleware/auth';
+import aiRoutes from './routes/ai.routes';
 
 dotenv.config();
 
@@ -97,6 +98,9 @@ app.get('/auth/logout', (req: Request, res: Response) => {
 app.get('/auth/me', isAuthenticated, (req: Request, res: Response) => {
   res.json(req.user);
 });
+
+// AI routes
+app.use('/api/ai', aiRoutes);
 
 // Database endpoints (protected)
 app.get('/api/users', isAuthenticated, async (_req: Request, res: Response) => {

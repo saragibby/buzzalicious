@@ -27,6 +27,8 @@ buzzalicious/
 - **Nodemon** - Auto-restart during development
 - **Prisma** - Database ORM
 - **PostgreSQL** - Database
+- **OpenAI SDK** - AI text and image generation
+- **Google Gemini** - AI text generation
 
 ## Getting Started
 
