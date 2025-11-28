@@ -3,18 +3,24 @@ import { IAIService } from './types';
 
 export class OpenAIService implements IAIService {
   private client: OpenAI;
+  private isAzure: boolean;
 
   constructor(apiKey: string, isAzure: boolean = false, azureConfig?: {
     endpoint: string;
     deployment: string;
     apiVersion: string;
   }) {
+    this.isAzure = isAzure;
     if (isAzure && azureConfig) {
+      // Azure OpenAI requires specific configuration
+      const azureEndpoint = azureConfig.endpoint.replace(/\/$/, ''); // Remove trailing slash
       this.client = new OpenAI({
         apiKey,
-        baseURL: `${azureConfig.endpoint}/openai/deployments/${azureConfig.deployment}`,
+        baseURL: `${azureEndpoint}/openai/deployments/${azureConfig.deployment}`,
         defaultQuery: { 'api-version': azureConfig.apiVersion },
-        defaultHeaders: { 'api-key': apiKey },
+        defaultHeaders: { 
+          'api-key': apiKey,
+        },
       });
     } else {
       this.client = new OpenAI({ apiKey });
@@ -40,12 +46,18 @@ export class OpenAIService implements IAIService {
       content: prompt,
     });
 
-    const response = await this.client.chat.completions.create({
-      model: options?.model || 'gpt-4-turbo-preview',
+    const completionParams: any = {
       messages,
       temperature: options?.temperature || 0.7,
       max_tokens: options?.maxTokens || 1000,
-    });
+    };
+
+    // For Azure, the model is specified in the baseURL deployment, not here
+    if (!this.isAzure) {
+      completionParams.model = options?.model || 'gpt-4o-mini';
+    }
+
+    const response = await this.client.chat.completions.create(completionParams);
 
     return response.choices[0]?.message?.content || '';
   }
