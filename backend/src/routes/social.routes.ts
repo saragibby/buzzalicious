@@ -72,29 +72,14 @@ router.get('/twitter/callback', async (req: Request, res: Response): Promise<voi
     // Clean up temporary storage
     oauthTokenStore.delete(oauth_token as string);
 
-    // Save to database
-    await prisma.socialAccount.upsert({
-      where: {
-        userId_platform_accountName: {
-          userId: stored.userId,
-          platform: 'twitter',
-          accountName: screenName,
-        },
-      },
-      update: {
-        accessToken,
-        refreshToken: accessSecret,
-        accountId: userId,
-        isActive: true,
-      },
-      create: {
-        userId: stored.userId,
-        platform: 'twitter',
-        accountName: screenName,
-        accountId: userId,
-        accessToken,
-        refreshToken: accessSecret,
-        isActive: true,
+    // Save tokens directly to user record
+    await prisma.user.update({
+      where: { id: stored.userId },
+      data: {
+        twitterAccessToken: accessToken,
+        twitterAccessSecret: accessSecret,
+        twitterUserId: userId,
+        twitterUsername: screenName,
       },
     });
 
@@ -115,30 +100,34 @@ router.post('/twitter/post', async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { accountId, text, mediaUrls } = req.body;
+    const { text, mediaUrls, generationRequestId } = req.body;
 
-    if (!accountId || !text) {
-      res.status(400).json({ error: 'Account ID and text are required' });
+    if (!text) {
+      res.status(400).json({ error: 'Text is required' });
       return;
     }
 
-    // Get the Twitter account
-    const account = await prisma.socialAccount.findFirst({
-      where: {
-        id: accountId,
-        userId: (req.user as any).id,
-        platform: 'twitter',
-        isActive: true,
+    const userId = (req.user as any).id;
+
+    // Get the user's Twitter credentials
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        twitterAccessToken: true,
+        twitterAccessSecret: true,
+        twitterUsername: true,
       },
     });
 
-    if (!account || !account.accessToken || !account.refreshToken) {
-      res.status(404).json({ error: 'Twitter account not found or not connected' });
+    if (!user || !user.twitterAccessToken || !user.twitterAccessSecret) {
+      res.status(404).json({ 
+        error: 'Twitter account not connected. Please connect your Twitter account in your Profile.' 
+      });
       return;
     }
 
     // Create Twitter service instance
-    const twitterService = new TwitterService(account.accessToken, account.refreshToken);
+    const twitterService = new TwitterService(user.twitterAccessToken, user.twitterAccessSecret);
 
     // Post tweet
     let result;
@@ -148,10 +137,22 @@ router.post('/twitter/post', async (req: Request, res: Response): Promise<void> 
       result = await twitterService.postTweet(text);
     }
 
+    // Mark generation request as posted if provided
+    if (generationRequestId) {
+      await prisma.generationRequest.update({
+        where: { id: generationRequestId },
+        data: {
+          postedToTwitter: true,
+          twitterPostId: result.id,
+          twitterPostedAt: new Date(),
+        },
+      });
+    }
+
     res.json({
       success: true,
       tweet: result,
-      message: 'Tweet posted successfully!',
+      message: `Tweet posted successfully to @${user.twitterUsername}!`,
     });
   } catch (error: any) {
     console.error('Twitter post error:', error);
@@ -160,35 +161,34 @@ router.post('/twitter/post', async (req: Request, res: Response): Promise<void> 
 });
 
 // Get Twitter account info
-router.get('/twitter/profile/:accountId', async (req: Request, res: Response): Promise<void> => {
+router.get('/twitter/status', async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
 
-    const { accountId } = req.params;
+    const userId = (req.user as any).id;
 
-    const account = await prisma.socialAccount.findFirst({
-      where: {
-        id: accountId,
-        userId: (req.user as any).id,
-        platform: 'twitter',
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        twitterUsername: true,
+        twitterUserId: true,
+        twitterAccessToken: true,
       },
     });
 
-    if (!account || !account.accessToken || !account.refreshToken) {
-      res.status(404).json({ error: 'Twitter account not found' });
-      return;
-    }
+    const isConnected = !!(user?.twitterAccessToken && user?.twitterUsername);
 
-    const twitterService = new TwitterService(account.accessToken, account.refreshToken);
-    const profile = await twitterService.getProfile();
-
-    res.json({ profile });
+    res.json({ 
+      isConnected,
+      username: user?.twitterUsername || null,
+      userId: user?.twitterUserId || null,
+    });
   } catch (error: any) {
-    console.error('Twitter profile error:', error);
-    res.status(500).json({ error: error.message || 'Failed to fetch Twitter profile' });
+    console.error('Twitter status error:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch Twitter status' });
   }
 });
 

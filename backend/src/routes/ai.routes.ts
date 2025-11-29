@@ -45,8 +45,9 @@ router.post('/generate', isAuthenticated, async (req: Request, res: Response): P
     });
 
     // Save generation request to database
+    let requestId = null;
     if (userId) {
-      await prisma.generationRequest.create({
+      const savedRequest = await prisma.generationRequest.create({
         data: {
           userId,
           provider,
@@ -55,9 +56,10 @@ router.post('/generate', isAuthenticated, async (req: Request, res: Response): P
           response: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
         },
       });
+      requestId = savedRequest.id;
     }
 
-    res.json(result);
+    res.json({ ...result, requestId });
   } catch (error: any) {
     console.error('AI generation error:', error);
     res.status(500).json({

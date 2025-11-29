@@ -14,13 +14,6 @@ interface AIResponse {
   model?: string;
 }
 
-interface SocialAccount {
-  id: string;
-  platform: string;
-  accountName: string;
-  isActive: boolean;
-}
-
 interface GenerationRequest {
   id: string;
   provider: string;
@@ -28,6 +21,13 @@ interface GenerationRequest {
   response: string;
   contentType: string;
   createdAt: string;
+  postedToTwitter: boolean;
+  twitterPostId?: string;
+}
+
+interface TwitterStatus {
+  isConnected: boolean;
+  username: string | null;
 }
 
 export function AIGenerator() {
@@ -39,11 +39,11 @@ export function AIGenerator() {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [error, setError] = useState('');
-  const [twitterAccounts, setTwitterAccounts] = useState<SocialAccount[]>([]);
-  const [selectedTwitterAccount, setSelectedTwitterAccount] = useState('');
+  const [twitterStatus, setTwitterStatus] = useState<TwitterStatus>({ isConnected: false, username: null });
   const [postingToTwitter, setPostingToTwitter] = useState(false);
   const [tweetSuccess, setTweetSuccess] = useState('');
   const [recentRequests, setRecentRequests] = useState<GenerationRequest[]>([]);
+  const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -65,20 +65,14 @@ export function AIGenerator() {
         console.error('Error fetching providers:', err);
       });
 
-    // Fetch Twitter accounts
-    fetch(`${backendUrl}/api/profile/social-accounts`, { credentials: 'include' })
+    // Fetch Twitter authorization status
+    fetch(`${backendUrl}/api/social/twitter/status`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
-        const twitter = data.socialAccounts.filter((acc: SocialAccount) => 
-          acc.platform === 'twitter' && acc.isActive
-        );
-        setTwitterAccounts(twitter);
-        if (twitter.length > 0) {
-          setSelectedTwitterAccount(twitter[0].id);
-        }
+        setTwitterStatus(data);
       })
       .catch(err => {
-        console.error('Error fetching Twitter accounts:', err);
+        console.error('Error fetching Twitter status:', err);
       });
 
     // Fetch recent generation requests
@@ -134,6 +128,7 @@ export function AIGenerator() {
 
       const data = await res.json();
       setResponse(data);
+      setCurrentRequestId(data.requestId || null);
       // Refresh recent requests after generating new content
       fetchRecentRequests();
     } catch (err: any) {
@@ -149,8 +144,8 @@ export function AIGenerator() {
       return;
     }
 
-    if (!selectedTwitterAccount) {
-      setError('Please select a Twitter account in your Profile page');
+    if (!twitterStatus.isConnected) {
+      setError('Please authorize Twitter in your Profile page first');
       return;
     }
 
@@ -165,8 +160,8 @@ export function AIGenerator() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: selectedTwitterAccount,
           text: response.content,
+          generationRequestId: currentRequestId,
         }),
       });
 
@@ -176,7 +171,9 @@ export function AIGenerator() {
       }
 
       const data = await res.json();
-      setTweetSuccess(`Tweet posted successfully! Tweet ID: ${data.tweet.id}`);
+      setTweetSuccess(data.message || 'Tweet posted successfully!');
+      // Refresh recent requests to show updated posted status
+      fetchRecentRequests();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -306,23 +303,11 @@ export function AIGenerator() {
                 {response.content}
               </div>
               
-              {twitterAccounts.length > 0 && (
+              {twitterStatus.isConnected && (
                 <div className="twitter-post-section">
-                  <div className="twitter-post-header">
-                    <label htmlFor="twitter-account">Post to Twitter:</label>
-                    <select
-                      id="twitter-account"
-                      value={selectedTwitterAccount}
-                      onChange={(e) => setSelectedTwitterAccount(e.target.value)}
-                      disabled={postingToTwitter}
-                    >
-                      {twitterAccounts.map(account => (
-                        <option key={account.id} value={account.id}>
-                          @{account.accountName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <p className="twitter-account-info">
+                    Posting as: <strong>@{twitterStatus.username}</strong>
+                  </p>
                   <button
                     className="twitter-post-button"
                     onClick={handlePostToTwitter}
@@ -370,10 +355,14 @@ export function AIGenerator() {
                 setPrompt(req.prompt);
                 setSelectedProvider(req.provider);
                 setContentType(req.contentType);
+                setCurrentRequestId(req.id);
               }}>
                 <div className="request-header">
                   <span className="request-badge">{req.provider}</span>
                   <span className="request-badge">{req.contentType}</span>
+                  {req.postedToTwitter && (
+                    <span className="request-badge posted">✓ Posted</span>
+                  )}
                 </div>
                 <div className="request-prompt">{req.prompt.substring(0, 100)}{req.prompt.length > 100 ? '...' : ''}</div>
                 <div className="request-date">{new Date(req.createdAt).toLocaleString()}</div>

@@ -201,33 +201,14 @@
   border-radius: 8px;
 }
 
-.twitter-post-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.twitter-post-header label {
-  font-weight: 500;
+.twitter-account-info {
+  margin: 0 0 1rem 0;
   color: #e0e0e0;
-  white-space: nowrap;
-}
-
-.twitter-post-header select {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid #444;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  font-family: inherit;
   font-size: 0.95rem;
 }
 
-.twitter-post-header select:focus {
-  outline: none;
-  border-color: #1d9bf0;
+.twitter-account-info strong {
+  color: #1d9bf0;
 }
 
 .twitter-post-button {
@@ -298,11 +279,6 @@
   .ai-generator {
     padding: 1rem;
     margin: 0;
-  }
-
-  .twitter-post-header {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .response-images {
@@ -382,6 +358,12 @@
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: capitalize;
+}
+
+.request-badge.posted {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #86efac;
 }
 
 .request-prompt {
