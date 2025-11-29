@@ -7,8 +7,15 @@ interface TwitterStatus {
   userId: string | null;
 }
 
+interface LinkedInStatus {
+  isConnected: boolean;
+  username: string | null;
+  userId: string | null;
+}
+
 export function Profile() {
   const [twitterStatus, setTwitterStatus] = useState<TwitterStatus>({ isConnected: false, username: null, userId: null });
+  const [linkedinStatus, setLinkedinStatus] = useState<LinkedInStatus>({ isConnected: false, username: null, userId: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -17,13 +24,18 @@ export function Profile() {
 
   useEffect(() => {
     fetchTwitterStatus();
+    fetchLinkedInStatus();
     
     // Check if Twitter was just connected (from OAuth callback)
     const params = new URLSearchParams(window.location.search);
     if (params.get('twitter_connected') === 'true') {
       setSuccess('Twitter account connected successfully!');
       fetchTwitterStatus();
-      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (params.get('linkedin_connected') === 'true') {
+      setSuccess('LinkedIn account connected successfully!');
+      fetchLinkedInStatus();
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -45,6 +57,21 @@ export function Profile() {
     }
   };
 
+  const fetchLinkedInStatus = async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/social/linkedin/status`, {
+        credentials: 'include',
+      });
+      
+      if (!res.ok) throw new Error('Failed to fetch LinkedIn status');
+      
+      const data = await res.json();
+      setLinkedinStatus(data);
+    } catch (err: any) {
+      console.error('LinkedIn status error:', err.message);
+    }
+  };
+
   const handleConnectTwitter = async () => {
     setError('');
     try {
@@ -59,6 +86,26 @@ export function Profile() {
 
       const data = await res.json();
       // Redirect to Twitter OAuth
+      window.location.href = data.authUrl;
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleConnectLinkedIn = async () => {
+    setError('');
+    try {
+      const res = await fetch(`${backendUrl}/api/social/linkedin/connect`, {
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.details || data.error || 'Failed to initiate LinkedIn connection');
+      }
+
+      const data = await res.json();
+      // Redirect to LinkedIn OAuth
       window.location.href = data.authUrl;
     } catch (err: any) {
       setError(err.message);
@@ -129,6 +176,42 @@ export function Profile() {
           )}
         </div>
 
+        <div className="platform-card linkedin-card">
+          <div className="platform-header">
+            <span className="platform-icon">💼</span>
+            <div className="platform-info">
+              <h4>LinkedIn</h4>
+              <p className="platform-description">
+                Allow Buzzalicious to post on LinkedIn on your behalf
+              </p>
+            </div>
+          </div>
+
+          {linkedinStatus.isConnected ? (
+            <div className="authorization-status connected">
+              <div className="status-info">
+                <span className="status-badge active">✓ Authorized</span>
+                <p className="connected-account">{linkedinStatus.username}</p>
+              </div>
+              <p className="status-note">
+                You can now post AI-generated content directly to LinkedIn from the AI Generator
+              </p>
+            </div>
+          ) : (
+            <div className="authorization-status not-connected">
+              <p className="status-note">
+                Connect your LinkedIn account to enable posting generated content
+              </p>
+              <button 
+                className="connect-button linkedin-connect"
+                onClick={handleConnectLinkedIn}
+              >
+                💼 Authorize LinkedIn
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Placeholder for future platforms */}
         <div className="platform-card disabled">
           <div className="platform-header">
@@ -145,16 +228,6 @@ export function Profile() {
             <span className="platform-icon">📷</span>
             <div className="platform-info">
               <h4>Instagram</h4>
-              <p className="platform-description">Coming soon</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="platform-card disabled">
-          <div className="platform-header">
-            <span className="platform-icon">💼</span>
-            <div className="platform-info">
-              <h4>LinkedIn</h4>
               <p className="platform-description">Coming soon</p>
             </div>
           </div>

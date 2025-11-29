@@ -245,6 +245,58 @@
   font-size: 0.9rem;
 }
 
+.linkedin-post-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(10, 102, 194, 0.1);
+  border: 1px solid rgba(10, 102, 194, 0.3);
+  border-radius: 8px;
+}
+
+.linkedin-account-info {
+  margin: 0 0 1rem 0;
+  color: #e0e0e0;
+  font-size: 0.95rem;
+}
+
+.linkedin-account-info strong {
+  color: #0a66c2;
+}
+
+.linkedin-post-button {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.linkedin-post-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(10, 102, 194, 0.4);
+}
+
+.linkedin-post-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.linkedin-success {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 6px;
+  color: #86efac;
+  font-size: 0.9rem;
+}
+
 .response-images {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

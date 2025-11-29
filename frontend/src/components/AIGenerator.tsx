@@ -23,9 +23,16 @@ interface GenerationRequest {
   createdAt: string;
   postedToTwitter: boolean;
   twitterPostId?: string;
+  postedToLinkedIn: boolean;
+  linkedinPostId?: string;
 }
 
 interface TwitterStatus {
+  isConnected: boolean;
+  username: string | null;
+}
+
+interface LinkedInStatus {
   isConnected: boolean;
   username: string | null;
 }
@@ -42,6 +49,9 @@ export function AIGenerator() {
   const [twitterStatus, setTwitterStatus] = useState<TwitterStatus>({ isConnected: false, username: null });
   const [postingToTwitter, setPostingToTwitter] = useState(false);
   const [tweetSuccess, setTweetSuccess] = useState('');
+  const [linkedinStatus, setLinkedinStatus] = useState<LinkedInStatus>({ isConnected: false, username: null });
+  const [postingToLinkedIn, setPostingToLinkedIn] = useState(false);
+  const [linkedInSuccess, setLinkedInSuccess] = useState('');
   const [recentRequests, setRecentRequests] = useState<GenerationRequest[]>([]);
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
 
@@ -73,6 +83,16 @@ export function AIGenerator() {
       })
       .catch(err => {
         console.error('Error fetching Twitter status:', err);
+      });
+
+    // Fetch LinkedIn authorization status
+    fetch(`${backendUrl}/api/social/linkedin/status`, { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        setLinkedinStatus(data);
+      })
+      .catch(err => {
+        console.error('Error fetching LinkedIn status:', err);
       });
 
     // Fetch recent generation requests
@@ -178,6 +198,49 @@ export function AIGenerator() {
       setError(err.message);
     } finally {
       setPostingToTwitter(false);
+    }
+  };
+
+  const handlePostToLinkedIn = async () => {
+    if (!response || response.contentType !== 'text' || typeof response.content !== 'string') {
+      setError('Only text content can be posted to LinkedIn');
+      return;
+    }
+
+    if (!linkedinStatus.isConnected) {
+      setError('Please authorize LinkedIn in your Profile page first');
+      return;
+    }
+
+    setPostingToLinkedIn(true);
+    setError('');
+    setLinkedInSuccess('');
+
+    try {
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const res = await fetch(`${backendUrl}/api/social/linkedin/post`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: response.content,
+          generationRequestId: currentRequestId,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to post to LinkedIn');
+      }
+
+      const data = await res.json();
+      setLinkedInSuccess(data.message || 'Posted to LinkedIn successfully!');
+      // Refresh recent requests to show updated posted status
+      fetchRecentRequests();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPostingToLinkedIn(false);
     }
   };
 
@@ -322,6 +385,26 @@ export function AIGenerator() {
                   )}
                 </div>
               )}
+
+              {linkedinStatus.isConnected && (
+                <div className="linkedin-post-section">
+                  <p className="linkedin-account-info">
+                    Posting as: <strong>{linkedinStatus.username}</strong>
+                  </p>
+                  <button
+                    className="linkedin-post-button"
+                    onClick={handlePostToLinkedIn}
+                    disabled={postingToLinkedIn}
+                  >
+                    {postingToLinkedIn ? '💼 Posting...' : '💼 Post to LinkedIn'}
+                  </button>
+                  {linkedInSuccess && (
+                    <div className="linkedin-success">
+                      ✅ {linkedInSuccess}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -361,7 +444,10 @@ export function AIGenerator() {
                   <span className="request-badge">{req.provider}</span>
                   <span className="request-badge">{req.contentType}</span>
                   {req.postedToTwitter && (
-                    <span className="request-badge posted">✓ Posted</span>
+                    <span className="request-badge posted">🐦 Posted</span>
+                  )}
+                  {req.postedToLinkedIn && (
+                    <span className="request-badge posted">💼 Posted</span>
                   )}
                 </div>
                 <div className="request-prompt">{req.prompt.substring(0, 100)}{req.prompt.length > 100 ? '...' : ''}</div>

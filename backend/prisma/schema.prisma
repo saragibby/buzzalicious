@@ -24,6 +24,11 @@ model User {
   twitterUsername     String?
   twitterUserId       String?
   
+  // LinkedIn OAuth tokens
+  linkedinAccessToken String?
+  linkedinUsername    String?
+  linkedinUserId      String?
+  
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   templates           Template[]
@@ -65,6 +70,10 @@ model GenerationRequest {
   postedToTwitter  Boolean   @default(false)
   twitterPostId    String?
   twitterPostedAt  DateTime?
+  
+  postedToLinkedIn Boolean   @default(false)
+  linkedinPostId   String?
+  linkedinPostedAt DateTime?
   
   createdAt        DateTime  @default(now())
 
