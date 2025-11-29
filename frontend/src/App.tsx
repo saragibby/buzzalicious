@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { AIGenerator } from './components/AIGenerator'
 import { Profile } from './components/Profile'
+import { Analytics } from './components/Analytics'
 import logo from './logo.png'
 
 interface User {
@@ -14,7 +15,7 @@ interface User {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'generator' | 'profile'>('generator');
+  const [activeTab, setActiveTab] = useState<'generator' | 'profile' | 'analytics'>('generator');
 
   useEffect(() => {
     // Check if user is logged in
@@ -108,6 +109,12 @@ function App() {
               🤖 AI Generator
             </button>
             <button 
+              className={`tab-button ${activeTab === 'analytics' ? 'active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+            >
+              📊 Analytics
+            </button>
+            <button 
               className={`tab-button ${activeTab === 'profile' ? 'active' : ''}`}
               onClick={() => setActiveTab('profile')}
             >
@@ -116,6 +123,7 @@ function App() {
           </nav>
 
           {activeTab === 'generator' && <AIGenerator />}
+          {activeTab === 'analytics' && <Analytics />}
           {activeTab === 'profile' && <Profile />}
         </>
       )}

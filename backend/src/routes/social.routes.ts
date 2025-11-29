@@ -7,6 +7,38 @@ const router = Router();
 // Store temporary OAuth tokens in memory (in production, use Redis or database)
 const oauthTokenStore = new Map<string, { secret: string; userId: string }>();
 
+// Get Twitter authorization status
+router.get('/twitter/status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const userId = (req.user as any).id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        twitterAccessToken: true,
+        twitterAccessSecret: true,
+        twitterUsername: true,
+        twitterUserId: true,
+      },
+    });
+
+    const isConnected = !!(user?.twitterAccessToken && user?.twitterAccessSecret);
+
+    res.json({
+      isConnected,
+      username: user?.twitterUsername || null,
+      userId: user?.twitterUserId || null,
+    });
+  } catch (error: any) {
+    console.error('Twitter status error:', error);
+    res.status(500).json({ error: 'Failed to fetch Twitter status' });
+  }
+});
+
 // Initiate Twitter OAuth flow
 router.get('/twitter/connect', async (req: Request, res: Response): Promise<void> => {
   try {

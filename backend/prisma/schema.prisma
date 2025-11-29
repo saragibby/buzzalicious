@@ -53,6 +53,14 @@ model GenerationRequest {
   response         String    @db.Text
   contentType      String    // 'text', 'image', 'video'
   
+  // Performance metrics
+  modelUsed        String?   // Specific model name used
+  responseTimeMs   Int?      // Response time in milliseconds
+  promptTokens     Int?      // Input tokens
+  completionTokens Int?      // Output tokens
+  totalTokens      Int?      // Total tokens used
+  estimatedCost    Float?    // Estimated cost in USD
+  
   // Post tracking
   postedToTwitter  Boolean   @default(false)
   twitterPostId    String?
