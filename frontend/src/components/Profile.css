@@ -222,7 +222,68 @@
 @media (max-width: 768px) {
   .profile-container {
     padding: 1rem;
-    margin: 1rem;
+    margin: 1rem auto;
+    max-width: 100%;
+  }
+
+  .profile-header h2 {
+    font-size: 1.6rem;
+  }
+
+  .social-accounts-section {
+    padding: 1.25rem;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .section-header h3 {
+    font-size: 1.3rem;
+  }
+
+  .platform-card {
+    padding: 1.25rem;
+  }
+
+  .platform-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .platform-icon {
+    font-size: 2rem;
+  }
+
+  .platform-info h4 {
+    font-size: 1.2rem;
+  }
+
+  .connect-button {
+    width: 100%;
+  }
+
+  .disconnect-button {
+    width: 100%;
+  }
+
+  .status-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-container {
+    padding: 0.75rem;
+    margin: 0.75rem auto;
+  }
+
+  .profile-header h2 {
+    font-size: 1.4rem;
   }
 
   .social-accounts-section {
@@ -233,7 +294,16 @@
     padding: 1rem;
   }
 
+  .platform-info h4 {
+    font-size: 1.1rem;
+  }
+
+  .platform-description {
+    font-size: 0.85rem;
+  }
+
   .connect-button {
-    width: 100%;
+    font-size: 0.95rem;
+    padding: 0.65rem 1.5rem;
   }
 }

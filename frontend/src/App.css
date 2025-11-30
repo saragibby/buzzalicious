@@ -129,3 +129,83 @@ h1 {
   height: 24px;
 }
 
+.header-branding {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.app-logo {
+  width: 190px;
+  height: auto;
+  max-width: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .App-header {
+    min-height: 20vh;
+    padding: 1.5rem 1rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .tab-navigation {
+    gap: 0.5rem;
+    padding: 0.75rem 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .tab-button {
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    flex: 1 1 auto;
+    min-width: fit-content;
+  }
+
+  .user-avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  .welcome-message {
+    font-size: 1rem;
+  }
+
+  .auth-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .app-logo {
+    width: 140px;
+  }
+
+  .header-branding {
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .tab-button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .app-logo {
+    width: 110px;
+  }
+
+  .header-branding {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+

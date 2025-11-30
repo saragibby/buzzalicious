@@ -438,15 +438,39 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
+@media (max-width: 1024px) {
+  .ai-generator-container {
+    max-width: 100%;
+    padding: 1rem;
+  }
+
+  .recent-requests-panel {
+    width: 280px;
+  }
+}
+
 @media (max-width: 768px) {
   .ai-generator-container {
     flex-direction: column;
     padding: 1rem;
+    margin: 1rem auto;
   }
 
   .ai-generator {
-    padding: 1rem;
+    padding: 1.25rem;
     margin: 0;
+  }
+
+  .ai-generator h2 {
+    font-size: 1.5rem;
+  }
+
+  .radio-group-horizontal {
+    flex-direction: column;
+  }
+
+  .radio-label {
+    width: 100%;
   }
 
   .response-images {
@@ -459,6 +483,60 @@
 
   .recent-requests-panel {
     order: -1;
+    width: 100%;
+    max-height: 400px;
+    position: relative;
+    top: 0;
+    margin-bottom: 1rem;
+  }
+
+  .generate-button {
+    font-size: 1rem;
+  }
+
+  .twitter-post-button,
+  .linkedin-post-button,
+  .canva-create-button,
+  .canva-confirm-button {
+    font-size: 0.95rem;
+    padding: 0.65rem 1.25rem;
+  }
+
+  .canva-buttons {
+    flex-direction: column;
+  }
+
+  .canva-cancel-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-generator {
+    padding: 1rem;
+  }
+
+  .ai-generator h2 {
+    font-size: 1.3rem;
+  }
+
+  .form-group label {
+    font-size: 0.9rem;
+  }
+
+  .generate-button {
+    padding: 0.85rem 1.5rem;
+    font-size: 0.95rem;
+  }
+
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+  }
+
+  .response-text {
+    font-size: 0.9rem;
+    padding: 0.85rem;
   }
 }
 

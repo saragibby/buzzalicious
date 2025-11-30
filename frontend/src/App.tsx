@@ -66,8 +66,8 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <img src={logo} alt="Buzzalicious Logo" className="app-logo" style={{ width: '190px' }} />
+        <div className="header-branding">
+          <img src={logo} alt="Buzzalicious Logo" className="app-logo" />
           <h1>Buzzalicious</h1>
         </div>
         {user ? (
