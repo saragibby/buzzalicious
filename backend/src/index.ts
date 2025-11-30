@@ -88,10 +88,7 @@ app.get('/auth/google/callback',
   passportConfig.authenticate('google', { failureRedirect: '/' }),
   (_req: Request, res: Response) => {
     // Successful authentication
-    const redirectUrl = process.env.NODE_ENV === 'production' 
-      ? '/' 
-      : getFrontendUrl();
-    res.redirect(redirectUrl);
+    res.redirect(getFrontendUrl());
   }
 );
 
