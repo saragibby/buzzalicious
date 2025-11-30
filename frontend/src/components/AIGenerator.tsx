@@ -25,6 +25,8 @@ interface GenerationRequest {
   twitterPostId?: string;
   postedToLinkedIn: boolean;
   linkedinPostId?: string;
+  canvaDesignId?: string;
+  canvaDesignUrl?: string;
 }
 
 interface TwitterStatus {
@@ -35,6 +37,17 @@ interface TwitterStatus {
 interface LinkedInStatus {
   isConnected: boolean;
   username: string | null;
+}
+
+interface CanvaStatus {
+  isConnected: boolean;
+  userId: string | null;
+}
+
+interface CanvaTemplate {
+  id: string;
+  name: string;
+  thumbnail?: string;
 }
 
 export function AIGenerator() {
@@ -52,11 +65,17 @@ export function AIGenerator() {
   const [linkedinStatus, setLinkedinStatus] = useState<LinkedInStatus>({ isConnected: false, username: null });
   const [postingToLinkedIn, setPostingToLinkedIn] = useState(false);
   const [linkedInSuccess, setLinkedInSuccess] = useState('');
+  const [canvaStatus, setCanvaStatus] = useState<CanvaStatus>({ isConnected: false, userId: null });
+  const [canvaTemplates, setCanvaTemplates] = useState<CanvaTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [creatingDesign, setCreatingDesign] = useState(false);
+  const [canvaSuccess, setCanvaSuccess] = useState('');
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [recentRequests, setRecentRequests] = useState<GenerationRequest[]>([]);
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
 
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
     
     // Fetch available providers
     fetch(`${backendUrl}/api/ai/providers`, { credentials: 'include' })
@@ -95,13 +114,27 @@ export function AIGenerator() {
         console.error('Error fetching LinkedIn status:', err);
       });
 
+    // Fetch Canva authorization status
+    fetch(`${backendUrl}/api/social/canva/status`, { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        setCanvaStatus(data);
+        // If connected, fetch templates
+        if (data.isConnected) {
+          fetchCanvaTemplates();
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching Canva status:', err);
+      });
+
     // Fetch recent generation requests
     fetchRecentRequests();
   }, []);
 
   const fetchRecentRequests = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
       const res = await fetch(`${backendUrl}/api/ai/recent`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
@@ -109,6 +142,22 @@ export function AIGenerator() {
       }
     } catch (err) {
       console.error('Error fetching recent requests:', err);
+    }
+  };
+
+  const fetchCanvaTemplates = async () => {
+    try {
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const res = await fetch(`${backendUrl}/api/social/canva/templates`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setCanvaTemplates(data.templates || []);
+        if (data.templates && data.templates.length > 0) {
+          setSelectedTemplate(data.templates[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching Canva templates:', err);
     }
   };
 
@@ -125,7 +174,7 @@ export function AIGenerator() {
     setResponse(null);
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
       const res = await fetch(`${backendUrl}/api/ai/generate`, {
         method: 'POST',
         credentials: 'include',
@@ -174,7 +223,7 @@ export function AIGenerator() {
     setTweetSuccess('');
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
       const res = await fetch(`${backendUrl}/api/social/twitter/post`, {
         method: 'POST',
         credentials: 'include',
@@ -217,7 +266,7 @@ export function AIGenerator() {
     setLinkedInSuccess('');
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
       const res = await fetch(`${backendUrl}/api/social/linkedin/post`, {
         method: 'POST',
         credentials: 'include',
@@ -241,6 +290,57 @@ export function AIGenerator() {
       setError(err.message);
     } finally {
       setPostingToLinkedIn(false);
+    }
+  };
+
+  const handleCreateCanvaDesign = async () => {
+    if (!response || response.contentType !== 'text' || typeof response.content !== 'string') {
+      setError('Only text content can be used to create Canva designs');
+      return;
+    }
+
+    if (!canvaStatus.isConnected) {
+      setError('Please authorize Canva in your Profile page first');
+      return;
+    }
+
+    if (!selectedTemplate) {
+      setError('Please select a Canva template');
+      return;
+    }
+
+    setCreatingDesign(true);
+    setError('');
+    setCanvaSuccess('');
+
+    try {
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const res = await fetch(`${backendUrl}/api/social/canva/create-design`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: response.content,
+          title: 'AI Generated Design',
+          brandTemplateId: selectedTemplate,
+          generationRequestId: currentRequestId,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to create Canva design');
+      }
+
+      const data = await res.json();
+      setCanvaSuccess(`Design created successfully! <a href="${data.design.url}" target="_blank" rel="noopener noreferrer">Open in Canva</a>`);
+      setShowTemplateSelector(false);
+      // Refresh recent requests to show updated Canva design status
+      fetchRecentRequests();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreatingDesign(false);
     }
   };
 
@@ -402,6 +502,57 @@ export function AIGenerator() {
                     <div className="linkedin-success">
                       ✅ {linkedInSuccess}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {canvaStatus.isConnected && (
+                <div className="canva-design-section">
+                  {!showTemplateSelector ? (
+                    <button
+                      className="canva-create-button"
+                      onClick={() => setShowTemplateSelector(true)}
+                    >
+                      🎨 Create Canva Design
+                    </button>
+                  ) : (
+                    <div className="canva-template-selector">
+                      <p className="canva-info">Select a template to create your design:</p>
+                      <select
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                        className="template-select"
+                      >
+                        {canvaTemplates.length === 0 ? (
+                          <option value="">No templates available</option>
+                        ) : (
+                          canvaTemplates.map((template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.name}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <div className="canva-buttons">
+                        <button
+                          className="canva-confirm-button"
+                          onClick={handleCreateCanvaDesign}
+                          disabled={creatingDesign || !selectedTemplate}
+                        >
+                          {creatingDesign ? '🎨 Creating...' : '🎨 Create Design'}
+                        </button>
+                        <button
+                          className="canva-cancel-button"
+                          onClick={() => setShowTemplateSelector(false)}
+                          disabled={creatingDesign}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {canvaSuccess && (
+                    <div className="canva-success" dangerouslySetInnerHTML={{ __html: canvaSuccess }} />
                   )}
                 </div>
               )}

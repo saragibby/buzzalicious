@@ -28,6 +28,13 @@ model User {
   linkedinAccessToken String?
   linkedinUsername    String?
   linkedinUserId      String?
+  linkedinTokenExpiry DateTime?
+  
+  // Canva OAuth tokens
+  canvaAccessToken    String?
+  canvaRefreshToken   String?
+  canvaTokenExpiry    DateTime?
+  canvaUserId         String?
   
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
@@ -74,6 +81,11 @@ model GenerationRequest {
   postedToLinkedIn Boolean   @default(false)
   linkedinPostId   String?
   linkedinPostedAt DateTime?
+  
+  // Canva design tracking
+  canvaDesignId    String?
+  canvaDesignUrl   String?
+  canvaCreatedAt   DateTime?
   
   createdAt        DateTime  @default(now())
 

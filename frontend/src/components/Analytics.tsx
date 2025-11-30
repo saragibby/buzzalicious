@@ -30,7 +30,7 @@ export function Analytics() {
 
   const fetchAnalytics = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
       const res = await fetch(`${backendUrl}/api/ai/analytics`, {
         credentials: 'include',
       });

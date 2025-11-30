@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
   credentials: true,
 }));
 app.use(express.json());
@@ -29,10 +29,11 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Must be false for http://
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      domain: undefined, // Don't set domain to allow both localhost and 127.0.0.1
     },
   })
 );
@@ -82,7 +83,7 @@ app.get('/auth/google/callback',
     // Successful authentication
     const redirectUrl = process.env.NODE_ENV === 'production' 
       ? '/' 
-      : process.env.FRONTEND_URL || 'http://localhost:3000';
+      : process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
     res.redirect(redirectUrl);
   }
 );
@@ -97,14 +98,16 @@ app.get('/auth/logout', (req: Request, res: Response) => {
 });
 
 app.get('/auth/me', isAuthenticated, (req: Request, res: Response) => {
+  console.log('Auth check - Session ID:', req.sessionID);
+  console.log('Auth check - User:', req.user ? 'exists' : 'null');
   res.json(req.user);
 });
 
 // AI routes
 app.use('/api/ai', aiRoutes);
 
-// Social media routes
-app.use('/api/social', isAuthenticated, socialRoutes);
+// Social media routes (note: callback routes must be public for OAuth)
+app.use('/api/social', socialRoutes);
 
 // Database endpoints (protected)
 app.get('/api/users', isAuthenticated, async (_req: Request, res: Response) => {
@@ -147,7 +150,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // Start server
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`🚀 Server is running on http://127.0.0.1:${PORT}`);
 });
 
 // Graceful shutdown

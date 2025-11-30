@@ -19,7 +19,7 @@ function App() {
 
   useEffect(() => {
     // Check if user is logged in
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
     fetch(`${backendUrl}/auth/me`, { credentials: 'include' })
       .then(res => {
         if (res.ok) {
@@ -39,12 +39,12 @@ function App() {
   }, []);
 
   const handleLogin = () => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
     window.location.href = `${backendUrl}/auth/google`;
   };
 
   const handleLogout = () => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
     fetch(`${backendUrl}/auth/logout`, { credentials: 'include' })
       .then(() => {
         setUser(null);

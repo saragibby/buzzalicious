@@ -11,6 +11,23 @@ passport.use(
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
+        const email = profile.emails?.[0]?.value;
+        
+        // Whitelist check - add your allowed emails or domains here
+        const allowedEmails = process.env.ALLOWED_EMAILS?.split(',').map(e => e.trim()) || [];
+        const allowedDomains = process.env.ALLOWED_DOMAINS?.split(',').map(d => d.trim()) || [];
+        
+        // If whitelist is configured, enforce it
+        if (allowedEmails.length > 0 || allowedDomains.length > 0) {
+          const isEmailAllowed = email && allowedEmails.includes(email);
+          const isDomainAllowed = email && allowedDomains.some(domain => email.endsWith(`@${domain}`));
+          
+          if (!isEmailAllowed && !isDomainAllowed) {
+            console.log(`Access denied for email: ${email}`);
+            return done(null, false, { message: 'Access denied. Your email is not whitelisted.' });
+          }
+        }
+        
         // Check if user exists
         let user = await prisma.user.findUnique({
           where: { googleId: profile.id },
@@ -19,7 +36,7 @@ passport.use(
         if (!user) {
           // Check if user with this email already exists
           user = await prisma.user.findUnique({
-            where: { email: profile.emails?.[0]?.value },
+            where: { email: email },
           });
 
           if (user) {
@@ -37,7 +54,7 @@ passport.use(
             user = await prisma.user.create({
               data: {
                 googleId: profile.id,
-                email: profile.emails?.[0]?.value || '',
+                email: email || '',
                 name: profile.displayName,
                 picture: profile.photos?.[0]?.value,
               },

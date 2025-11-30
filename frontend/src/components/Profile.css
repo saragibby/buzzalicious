@@ -167,6 +167,45 @@
   box-shadow: 0 6px 20px rgba(29, 155, 240, 0.4);
 }
 
+.linkedin-connect {
+  background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
+  color: white;
+}
+
+.linkedin-connect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(10, 102, 194, 0.4);
+}
+
+.canva-connect {
+  background: linear-gradient(135deg, #7d2ae8 0%, #6420c7 100%);
+  color: white;
+}
+
+.canva-connect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(125, 42, 232, 0.4);
+}
+
+.disconnect-button {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.5rem;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 6px;
+  color: #fca5a5;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.disconnect-button:hover {
+  background: rgba(220, 38, 38, 0.2);
+  border-color: rgba(220, 38, 38, 0.5);
+  transform: translateY(-1px);
+}
+
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
