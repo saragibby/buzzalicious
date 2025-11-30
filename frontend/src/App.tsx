@@ -4,6 +4,7 @@ import { AIGenerator } from './components/AIGenerator'
 import { Profile } from './components/Profile'
 import { Analytics } from './components/Analytics'
 import logo from './logo.png'
+import { getBackendUrl } from './utils/api'
 
 interface User {
   id: string;
@@ -19,7 +20,7 @@ function App() {
 
   useEffect(() => {
     // Check if user is logged in
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+    const backendUrl = getBackendUrl();
     fetch(`${backendUrl}/auth/me`, { credentials: 'include' })
       .then(res => {
         if (res.ok) {
@@ -39,12 +40,12 @@ function App() {
   }, []);
 
   const handleLogin = () => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+    const backendUrl = getBackendUrl();
     window.location.href = `${backendUrl}/auth/google`;
   };
 
   const handleLogout = () => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+    const backendUrl = getBackendUrl();
     fetch(`${backendUrl}/auth/logout`, { credentials: 'include' })
       .then(() => {
         setUser(null);

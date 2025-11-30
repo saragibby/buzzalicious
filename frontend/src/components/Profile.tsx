@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './Profile.css';
+import { getBackendUrl } from '../utils/api';
 
 interface TwitterStatus {
   isConnected: boolean;
@@ -26,7 +27,7 @@ export function Profile() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+  const backendUrl = getBackendUrl();
 
   useEffect(() => {
     fetchTwitterStatus();

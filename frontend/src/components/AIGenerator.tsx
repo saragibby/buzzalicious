@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './AIGenerator.css';
+import { getBackendUrl } from '../utils/api';
 
 interface AIProvider {
   id: string;
@@ -75,7 +76,7 @@ export function AIGenerator() {
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
 
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+    const backendUrl = getBackendUrl();
     
     // Fetch available providers
     fetch(`${backendUrl}/api/ai/providers`, { credentials: 'include' })
@@ -134,7 +135,7 @@ export function AIGenerator() {
 
   const fetchRecentRequests = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/ai/recent`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
@@ -147,7 +148,7 @@ export function AIGenerator() {
 
   const fetchCanvaTemplates = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/social/canva/templates`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
@@ -174,7 +175,7 @@ export function AIGenerator() {
     setResponse(null);
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/ai/generate`, {
         method: 'POST',
         credentials: 'include',
@@ -223,7 +224,7 @@ export function AIGenerator() {
     setTweetSuccess('');
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/social/twitter/post`, {
         method: 'POST',
         credentials: 'include',
@@ -266,7 +267,7 @@ export function AIGenerator() {
     setLinkedInSuccess('');
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/social/linkedin/post`, {
         method: 'POST',
         credentials: 'include',
@@ -314,7 +315,7 @@ export function AIGenerator() {
     setCanvaSuccess('');
 
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/social/canva/create-design`, {
         method: 'POST',
         credentials: 'include',

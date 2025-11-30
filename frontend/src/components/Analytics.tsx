@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './Analytics.css';
+import { getBackendUrl } from '../utils/api';
 
 interface ProviderStats {
   provider: string;
@@ -30,7 +31,7 @@ export function Analytics() {
 
   const fetchAnalytics = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/ai/analytics`, {
         credentials: 'include',
       });
