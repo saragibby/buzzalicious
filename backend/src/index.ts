@@ -11,12 +11,19 @@ import socialRoutes from './routes/social.routes';
 
 dotenv.config();
 
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL || 'https://your-app.herokuapp.com';
+  }
+  return 'http://127.0.0.1:3000';
+};
+
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+  origin: getFrontendUrl(),
   credentials: true,
 }));
 app.use(express.json());
@@ -83,7 +90,7 @@ app.get('/auth/google/callback',
     // Successful authentication
     const redirectUrl = process.env.NODE_ENV === 'production' 
       ? '/' 
-      : process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
+      : getFrontendUrl();
     res.redirect(redirectUrl);
   }
 );

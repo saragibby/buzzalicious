@@ -2,12 +2,20 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import prisma from './db';
 
+// Determine base URL based on environment
+const getBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.BACKEND_URL || 'https://your-app.herokuapp.com';
+  }
+  return 'http://127.0.0.1:3001';
+};
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || `${getBaseUrl()}/auth/google/callback`,
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {

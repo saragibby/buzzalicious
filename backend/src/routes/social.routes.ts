@@ -6,6 +6,14 @@ import { CanvaService } from '../services/canva.service';
 
 const router = Router();
 
+// Helper function to get frontend URL based on environment
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL || 'https://your-app.herokuapp.com';
+  }
+  return 'http://127.0.0.1:3000';
+};
+
 // Store temporary OAuth tokens in memory (in production, use Redis or database)
 const oauthTokenStore = new Map<string, { secret: string; userId: string }>();
 const linkedinStateStore = new Map<string, string>(); // state -> userId
@@ -147,7 +155,7 @@ router.get('/twitter/callback', async (req: Request, res: Response): Promise<voi
     });
 
     // Redirect back to frontend
-    const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
+    const frontendUrl = getFrontendUrl();
     res.redirect(`${frontendUrl}?twitter_connected=true`);
   } catch (error) {
     console.error('Twitter callback error:', error);
@@ -342,7 +350,7 @@ router.get('/linkedin/callback', async (req: Request, res: Response): Promise<vo
     // Check if LinkedIn returned an error
     if (error) {
       console.error('LinkedIn OAuth error:', error, error_description);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
+      const frontendUrl = getFrontendUrl();
       const errorMsg = typeof error_description === 'string' ? error_description : (typeof error === 'string' ? error : 'Unknown error');
       res.redirect(`${frontendUrl}?linkedin_error=${encodeURIComponent(errorMsg)}`);
       return;
@@ -387,7 +395,7 @@ router.get('/linkedin/callback', async (req: Request, res: Response): Promise<vo
     });
 
     // Redirect back to frontend
-    const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
+    const frontendUrl = getFrontendUrl();
     res.redirect(`${frontendUrl}?linkedin_connected=true`);
   } catch (error: any) {
     console.error('LinkedIn callback error:', error);
@@ -586,7 +594,7 @@ router.get('/canva/callback', async (req: Request, res: Response): Promise<void>
     // Check if Canva returned an error
     if (error) {
       console.error('Canva OAuth error:', error, error_description);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
+      const frontendUrl = getFrontendUrl();
       const errorMsg = typeof error_description === 'string' ? error_description : (typeof error === 'string' ? error : 'Unknown error');
       res.redirect(`${frontendUrl}?canva_error=${encodeURIComponent(errorMsg)}`);
       return;
@@ -653,7 +661,7 @@ router.get('/canva/callback', async (req: Request, res: Response): Promise<void>
     console.log('Updated user canvaUserId:', updatedUser.canvaUserId);
 
     // Redirect back to frontend (use 127.0.0.1 to match Canva's requirement)
-    const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:3000';
+    const frontendUrl = getFrontendUrl();
     console.log('Redirecting to frontend:', `${frontendUrl}?canva_connected=true`);
     console.log('========== CANVA CALLBACK END ==========');
     res.redirect(`${frontendUrl}?canva_connected=true`);
