@@ -3,6 +3,7 @@ import './App.css'
 import { AIGenerator } from './components/AIGenerator'
 import { Profile } from './components/Profile'
 import { Analytics } from './components/Analytics'
+import { ScheduledPosts } from './components/ScheduledPosts'
 import logo from './logo.png'
 import { getBackendUrl } from './utils/api'
 
@@ -16,7 +17,7 @@ interface User {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'generator' | 'profile' | 'analytics'>('generator');
+  const [activeTab, setActiveTab] = useState<'generator' | 'profile' | 'analytics' | 'scheduled'>('generator');
 
   useEffect(() => {
     // Check if user is logged in
@@ -26,12 +27,14 @@ function App() {
         if (res.ok) {
           return res.json();
         }
-        throw new Error('Not authenticated');
+        // Don't throw error for 401 (expected when not logged in)
+        return null;
       })
       .then(data => {
         setUser(data);
       })
       .catch(() => {
+        // Silently handle any network errors
         setUser(null);
       })
       .finally(() => {
@@ -110,6 +113,12 @@ function App() {
               🤖 AI Generator
             </button>
             <button 
+              className={`tab-button ${activeTab === 'scheduled' ? 'active' : ''}`}
+              onClick={() => setActiveTab('scheduled')}
+            >
+              📅 Scheduled
+            </button>
+            <button 
               className={`tab-button ${activeTab === 'analytics' ? 'active' : ''}`}
               onClick={() => setActiveTab('analytics')}
             >
@@ -124,6 +133,7 @@ function App() {
           </nav>
 
           {activeTab === 'generator' && <AIGenerator />}
+          {activeTab === 'scheduled' && <ScheduledPosts />}
           {activeTab === 'analytics' && <Analytics />}
           {activeTab === 'profile' && <Profile />}
         </>

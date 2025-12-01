@@ -1,0 +1,247 @@
+.scheduled-posts-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 2rem auto;
+  padding: 2rem;
+}
+
+.scheduled-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.scheduled-header h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+}
+
+.scheduled-subtitle {
+  color: #999;
+  margin: 0;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.filter-tab {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #999;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+}
+
+.filter-tab.active {
+  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  color: white;
+  border-color: #646cff;
+}
+
+.no-posts {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #999;
+}
+
+.no-posts p {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
+.post-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.post-card:hover {
+  border-color: #646cff;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.platform-icon {
+  font-size: 1.5rem;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-pending {
+  background: rgba(234, 179, 8, 0.2);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #fcd34d;
+}
+
+.status-posted {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.status-failed {
+  background: rgba(220, 38, 38, 0.2);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  color: #fca5a5;
+}
+
+.status-cancelled {
+  background: rgba(107, 114, 128, 0.2);
+  border: 1px solid rgba(107, 114, 128, 0.4);
+  color: #d1d5db;
+}
+
+.post-content {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  white-space: pre-wrap;
+}
+
+.post-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.meta-label {
+  color: #999;
+  font-weight: 500;
+}
+
+.meta-value {
+  color: #e0e0e0;
+}
+
+.error-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: rgba(220, 38, 38, 0.1);
+  border-radius: 6px;
+}
+
+.error-text {
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+
+.cancel-button {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #fca5a5;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
+  background: rgba(220, 38, 38, 0.2);
+  border-color: rgba(220, 38, 38, 0.5);
+  transform: translateY(-1px);
+}
+
+.error-message {
+  padding: 1rem;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 6px;
+  color: #fca5a5;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .scheduled-posts-container {
+    padding: 1rem;
+    margin: 1rem auto;
+  }
+
+  .scheduled-header h2 {
+    font-size: 1.6rem;
+  }
+
+  .posts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-tabs {
+    gap: 0.5rem;
+  }
+
+  .filter-tab {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .scheduled-posts-container {
+    padding: 0.75rem;
+  }
+
+  .scheduled-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .post-card {
+    padding: 1rem;
+  }
+
+  .meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}

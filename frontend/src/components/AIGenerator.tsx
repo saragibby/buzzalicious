@@ -74,6 +74,12 @@ export function AIGenerator() {
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [recentRequests, setRecentRequests] = useState<GenerationRequest[]>([]);
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [schedulePlatform, setSchedulePlatform] = useState<'twitter' | 'linkedin' | 'both'>('both');
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleSuccess, setScheduleSuccess] = useState('');
 
   useEffect(() => {
     const backendUrl = getBackendUrl();
@@ -99,6 +105,7 @@ export function AIGenerator() {
     fetch(`${backendUrl}/api/social/twitter/status`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
+        console.log('Twitter status received:', data);
         setTwitterStatus(data);
       })
       .catch(err => {
@@ -109,6 +116,7 @@ export function AIGenerator() {
     fetch(`${backendUrl}/api/social/linkedin/status`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
+        console.log('LinkedIn status received:', data);
         setLinkedinStatus(data);
       })
       .catch(err => {
@@ -176,6 +184,15 @@ export function AIGenerator() {
 
     try {
       const backendUrl = getBackendUrl();
+      
+      // Build system context for clean social media posts
+      const systemContext = contentType === 'text' 
+        ? 'Generate a social media post that is ready to publish directly. Return ONLY the post content with no additional formatting, explanations, quotes, or meta-commentary. Do not include phrases like "Here\'s a post" or "Caption:" or wrap the content in quotes. Do not use quotation marks around the text. The output should be the exact text that will be posted to social media without any surrounding quotes or formatting.'
+        : '';
+      
+      // Combine system context with user context
+      const finalContext = systemContext + (context ? `\n\nAdditional context: ${context}` : '');
+      
       const res = await fetch(`${backendUrl}/api/ai/generate`, {
         method: 'POST',
         credentials: 'include',
@@ -184,7 +201,7 @@ export function AIGenerator() {
           provider: selectedProvider,
           contentType,
           prompt,
-          context: context || undefined,
+          context: finalContext || undefined,
           options: {
             temperature: 0.7,
           }
@@ -345,6 +362,64 @@ export function AIGenerator() {
     }
   };
 
+  const handleSchedulePost = async () => {
+    if (!response || response.contentType !== 'text' || typeof response.content !== 'string') {
+      setError('Only text content can be scheduled');
+      return;
+    }
+
+    if (!scheduleDate || !scheduleTime) {
+      setError('Please select both date and time');
+      return;
+    }
+
+    // Validate platform availability
+    if ((schedulePlatform === 'twitter' || schedulePlatform === 'both') && !twitterStatus.isConnected) {
+      setError('Please authorize Twitter in your Profile page first');
+      return;
+    }
+
+    if ((schedulePlatform === 'linkedin' || schedulePlatform === 'both') && !linkedinStatus.isConnected) {
+      setError('Please authorize LinkedIn in your Profile page first');
+      return;
+    }
+
+    setScheduling(true);
+    setError('');
+    setScheduleSuccess('');
+
+    try {
+      const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`);
+      const backendUrl = getBackendUrl();
+      
+      const res = await fetch(`${backendUrl}/api/schedule`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: response.content,
+          platform: schedulePlatform,
+          scheduledFor: scheduledFor.toISOString(),
+          generationRequestId: currentRequestId,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to schedule post');
+      }
+
+      setScheduleSuccess(`Post scheduled successfully for ${scheduledFor.toLocaleString()}!`);
+      setShowScheduleModal(false);
+      setScheduleDate('');
+      setScheduleTime('');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const selectedProviderData = providers.find(p => p.id === selectedProvider);
 
   return (
@@ -437,13 +512,35 @@ export function AIGenerator() {
           />
         </div>
 
-        <button 
-          type="submit" 
-          className="generate-button"
-          disabled={loading || !selectedProvider}
-        >
-          {loading ? 'Generating...' : 'Generate'}
-        </button>
+        <div className="form-actions">
+          <button 
+            type="submit" 
+            className="generate-button"
+            disabled={loading || !selectedProvider}
+          >
+            {loading ? 'Generating...' : 'Generate'}
+          </button>
+          <button
+            type="button"
+            className="clear-button"
+            onClick={() => {
+              setPrompt('');
+              setContext('');
+              setResponse(null);
+              setError('');
+              setTweetSuccess('');
+              setLinkedInSuccess('');
+              setCanvaSuccess('');
+              setScheduleSuccess('');
+              setCurrentRequestId(null);
+              setShowScheduleModal(false);
+              setShowTemplateSelector(false);
+            }}
+            disabled={loading}
+          >
+            Clear
+          </button>
+        </div>
       </form>
 
       {error && (
@@ -502,6 +599,91 @@ export function AIGenerator() {
                   {linkedInSuccess && (
                     <div className="linkedin-success">
                       ✅ {linkedInSuccess}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(() => {
+                const shouldShowSchedule = twitterStatus.isConnected || linkedinStatus.isConnected;
+                console.log('Schedule button check:', {
+                  twitterStatus,
+                  linkedinStatus,
+                  shouldShowSchedule
+                });
+                return shouldShowSchedule;
+              })() && (
+                <div className="schedule-post-section">
+                  {!showScheduleModal ? (
+                    <button
+                      className="schedule-button"
+                      onClick={() => {
+                        setShowScheduleModal(true);
+                        setScheduleSuccess('');
+                        setError('');
+                      }}
+                    >
+                      📅 Schedule Post
+                    </button>
+                  ) : (
+                    <div className="schedule-modal">
+                      <h4>Schedule Your Post</h4>
+                      <div className="schedule-form">
+                        <div className="form-group">
+                          <label>Platform</label>
+                          <select 
+                            value={schedulePlatform} 
+                            onChange={(e) => setSchedulePlatform(e.target.value as any)}
+                            className="schedule-select"
+                          >
+                            {twitterStatus.isConnected && <option value="twitter">Twitter</option>}
+                            {linkedinStatus.isConnected && <option value="linkedin">LinkedIn</option>}
+                            {twitterStatus.isConnected && linkedinStatus.isConnected && <option value="both">Both</option>}
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label>Date</label>
+                          <input
+                            type="date"
+                            value={scheduleDate}
+                            onChange={(e) => setScheduleDate(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="schedule-input"
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Time</label>
+                          <input
+                            type="time"
+                            value={scheduleTime}
+                            onChange={(e) => setScheduleTime(e.target.value)}
+                            className="schedule-input"
+                            required
+                          />
+                        </div>
+                        <div className="schedule-buttons">
+                          <button
+                            className="schedule-confirm-button"
+                            onClick={handleSchedulePost}
+                            disabled={scheduling || !scheduleDate || !scheduleTime}
+                          >
+                            {scheduling ? '📅 Scheduling...' : '📅 Schedule'}
+                          </button>
+                          <button
+                            className="schedule-cancel-button"
+                            onClick={() => setShowScheduleModal(false)}
+                            disabled={scheduling}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {scheduleSuccess && (
+                    <div className="schedule-success">
+                      ✅ {scheduleSuccess}
                     </div>
                   )}
                 </div>

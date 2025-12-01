@@ -40,6 +40,7 @@ model User {
   updatedAt           DateTime            @updatedAt
   templates           Template[]
   generationRequests  GenerationRequest[]
+  scheduledPosts      ScheduledPost[]
 
   @@map("users")
 }
@@ -90,4 +91,36 @@ model GenerationRequest {
   createdAt        DateTime  @default(now())
 
   @@map("generation_requests")
+}
+
+model ScheduledPost {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Content
+  content           String    @db.Text
+  platform          String    // 'twitter', 'linkedin', 'both'
+  
+  // Scheduling
+  scheduledFor      DateTime
+  status            String    @default("pending") // 'pending', 'posted', 'failed', 'cancelled'
+  
+  // Result tracking
+  twitterPostId     String?
+  twitterPostedAt   DateTime?
+  twitterError      String?
+  
+  linkedinPostId    String?
+  linkedinPostedAt  DateTime?
+  linkedinError     String?
+  
+  // Reference to original generation
+  generationRequestId String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("scheduled_posts")
+  @@index([scheduledFor, status])
 }

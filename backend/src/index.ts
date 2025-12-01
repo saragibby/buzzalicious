@@ -8,6 +8,8 @@ import passportConfig from './auth';
 import { isAuthenticated } from './middleware/auth';
 import aiRoutes from './routes/ai.routes';
 import socialRoutes from './routes/social.routes';
+import scheduleRoutes from './routes/schedule.routes';
+import { SchedulerService } from './services/scheduler.service';
 
 dotenv.config();
 
@@ -113,6 +115,9 @@ app.use('/api/ai', aiRoutes);
 // Social media routes (note: callback routes must be public for OAuth)
 app.use('/api/social', socialRoutes);
 
+// Schedule routes
+app.use('/api/schedule', scheduleRoutes);
+
 // Database endpoints (protected)
 app.get('/api/users', isAuthenticated, async (_req: Request, res: Response) => {
   try {
@@ -157,9 +162,13 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://127.0.0.1:${PORT}`);
 });
 
+// Start the post scheduler
+const schedulerInterval = SchedulerService.startScheduler();
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server');
+  clearInterval(schedulerInterval);
   server.close(async () => {
     await prisma.$disconnect();
     console.log('HTTP server closed');
