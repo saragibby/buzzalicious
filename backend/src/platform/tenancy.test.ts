@@ -248,7 +248,29 @@ describe('writes', () => {
 
   it('scopes an update, so a cross-tenant id finds no record', () => {
     const plan = planScopedCall('Post', 'update', { where: { id: 'p1' }, data: {} }, BRAND);
-    expect(argsOf(plan).where).toEqual({ AND: [{ id: 'p1' }, { brandId: 'brand-1' }] });
+
+    // The unique field stays at the top level. Prisma's `WhereUniqueInput` requires one
+    // there and rejects an `AND`-wrapped filter outright, so the previous shape —
+    // `{ AND: [{ id }, { brandId }] }` — failed every scoped update at runtime while this
+    // test passed, because it asserted the shape the module produced rather than a shape
+    // Prisma accepts. `tests/db/tenancy.test.ts` now runs the real call.
+    expect(argsOf(plan).where).toEqual({ id: 'p1', AND: [{ brandId: 'brand-1' }] });
+  });
+
+  it('keeps a caller’s own AND clauses when scoping an update', () => {
+    const plan = planScopedCall(
+      'Post',
+      'update',
+      { where: { id: 'p1', AND: [{ status: 'DRAFT' }] }, data: {} },
+      BRAND,
+    );
+
+    // Replacing the caller's `AND` rather than appending to it would drop a condition
+    // they wrote — silently widening the rows their update touches.
+    expect(argsOf(plan).where).toEqual({
+      id: 'p1',
+      AND: [{ status: 'DRAFT' }, { brandId: 'brand-1' }],
+    });
   });
 
   it('scopes both halves of an upsert', () => {
@@ -258,7 +280,7 @@ describe('writes', () => {
       { where: { id: 'a1' }, create: { kind: 'PHOTO' }, update: {} },
       BRAND,
     );
-    expect(argsOf(plan).where).toEqual({ AND: [{ id: 'a1' }, { brandId: 'brand-1' }] });
+    expect(argsOf(plan).where).toEqual({ id: 'a1', AND: [{ brandId: 'brand-1' }] });
     expect(argsOf(plan).create).toEqual({ kind: 'PHOTO', brandId: 'brand-1' });
   });
 

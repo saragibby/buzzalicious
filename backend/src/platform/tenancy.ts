@@ -254,12 +254,30 @@ function scopeFilterFor(model: TenantModel, scope: TenantScope): Filter {
  *
  * Merging would let a caller's key silently win — the exact bug this module exists to
  * prevent — and AND-ing composes correctly with `OR`, which `PlatformCredential` uses.
+ *
+ * `preserveTopLevel` keeps the caller's own keys where they were and AND-s the scope
+ * fragment alongside them. That is semantically identical — Prisma AND-s top-level keys
+ * with `AND` clauses — but it is *not* interchangeable for `update`, `delete` and
+ * `upsert`: a `WhereUniqueInput` must carry at least one unique field at the top level,
+ * and wrapping the whole filter in `AND` buries it. See `UNIQUE_WRITE_OPERATIONS`.
  */
-function applyScopeToWhere(model: TenantModel, scope: TenantScope, where: unknown): Filter {
+function applyScopeToWhere(
+  model: TenantModel,
+  scope: TenantScope,
+  where: unknown,
+  options: { preserveTopLevel?: boolean } = {},
+): Filter {
   assertNoConflictingFilter(model, scope, where);
   const fragment = scopeFilterFor(model, scope);
 
   if (!isPlainObject(where) || Object.keys(where).length === 0) return fragment;
+
+  if (options.preserveTopLevel) {
+    const { AND: existing, ...rest } = where;
+    const clauses = existing === undefined ? [] : Array.isArray(existing) ? existing : [existing];
+    return { ...rest, AND: [...clauses, fragment] };
+  }
+
   return { AND: [where, fragment] };
 }
 
@@ -310,6 +328,17 @@ const READ_OPERATIONS = new Set([
  * `update`, `delete` and `upsert` accept extra non-unique filters in Prisma 5
  * (extendedWhereUnique), so the scope can be injected directly. A cross-tenant id then
  * raises Prisma's "record not found", which is the correct outcome.
+ *
+ * The injection must leave the caller's unique field at the *top level* of the `where`.
+ * Prisma requires at least one unique field there, and an `AND`-wrapped filter has none —
+ * `db.post.update({ where: { AND: [{ id }, { brandId }] } })` is rejected outright with
+ * "Argument `where` of type PostWhereUniqueInput needs at least one of `id` arguments".
+ *
+ * This was wrong until W5 and nothing caught it, because the unit test asserted the shape
+ * this module produced rather than a shape Prisma accepts, and no test ever executed a
+ * scoped `update` against a database. Every scoped update and soft delete in the app
+ * failed at runtime, including `updateBrand` and `deleteBrand`. `tests/db/tenancy.test.ts`
+ * now runs the real calls.
  */
 const UNIQUE_WRITE_OPERATIONS = new Set(['update', 'delete', 'upsert']);
 
@@ -398,7 +427,7 @@ export function planScopedCall(
   if (UNIQUE_WRITE_OPERATIONS.has(operation)) {
     const patched: Record<string, unknown> = {
       ...args,
-      where: applyScopeToWhere(model, scope, args.where),
+      where: applyScopeToWhere(model, scope, args.where, { preserveTopLevel: true }),
     };
     if ('create' in patched) {
       patched.create = stampCreateData(model, scope, patched.create);
