@@ -730,6 +730,7 @@ model ShortLink {
   expiresAt      DateTime?
   clicks         LinkClick[]
 
+  @@unique([postId, platform])
   @@index([brandId, createdAt])
   @@index([postId])
   @@map("short_links")
@@ -749,6 +750,15 @@ model LinkClick {
   // Link-preview crawlers hit every short link on publish. Unfiltered they would poison
   // the outcome signal the whole feedback loop rests on.
   isBot       Boolean   @default(false)
+  // Which filter fired, so a layer can be retuned retroactively against real traffic.
+  //
+  // ADR-0006 says flag rather than drop *specifically* so the filters can be revisited
+  // once we have real data. A bare `isBot` cannot deliver that: it records that something
+  // matched, not what, so there is no way to select the clicks one layer alone caught and
+  // ask whether it was too aggressive. Stable tokens, not prose — these get grouped by.
+  // `ua-crawler` | `head-request` | `non-html-accept` | `publish-proximity` | `duplicate`.
+  // Null for a click no filter flagged.
+  botReason   String?
 
   @@index([shortLinkId, occurredAt])
   @@index([shortLinkId, isBot, occurredAt])
