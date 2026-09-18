@@ -44,11 +44,19 @@ createdb buzzalicious_test
 TEST_DATABASE_URL=postgresql://localhost:5432/buzzalicious_test npm test
 ```
 
-The schema is applied automatically. `backend/tests/global-setup.ts` runs
-`prisma migrate deploy` before the suite whenever `TEST_DATABASE_URL` is set, and does
-nothing when it is not. Deliberately `migrate deploy` and not `migrate dev`: it is the
-same command the Procfile runs on release, so every test run rehearses the deploy path
-rather than only the local one. Create the database; do not migrate it by hand.
+The schema and seed are applied automatically. `backend/tests/global-setup.ts` runs
+`prisma migrate deploy` and then the seed before the suite whenever `TEST_DATABASE_URL`
+is set, and does nothing when it is not. Deliberately `migrate deploy` and not
+`migrate dev`: it is the same command the Procfile runs on release, so every test run
+rehearses the deploy path rather than only the local one. Create the database; do not
+migrate or seed it by hand.
+
+Seeding in global setup is load-bearing, not a convenience. It used to happen only as a
+side effect of `seed.test.ts` calling `seedAll`, which made every other database test's
+data depend on **file execution order** — a file sorting before `seed.test.ts` saw an
+empty database and failed on a cold one while passing on any database a previous run had
+touched. If a database test needs seeded data, read it; never seed from a `beforeAll`,
+and never depend on another test file having run first.
 
 Database tests own their fixtures. Backend test files run one at a time
 (`fileParallelism: false`) because they share one Postgres, but that only removes

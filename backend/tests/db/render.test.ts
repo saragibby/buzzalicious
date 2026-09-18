@@ -11,9 +11,10 @@ import { hasTestDatabase } from '../env';
  * The parts of W4 that only exist against a database: the rendition cache, the text-only
  * path, and industry relevance ranking.
  *
- * These run against W2's seed, so they need `npm run db:seed` to have been applied to
- * `TEST_DATABASE_URL`. Without a database the file skips — `npm test` has to pass on a
- * clean clone with no Postgres (docs/12).
+ * These run against W2's seed, which `tests/global-setup.ts` applies to
+ * `TEST_DATABASE_URL` before any test file runs — do not seed locally here, and do not
+ * assume a particular file ordering. Without a database the file skips; `npm test` has to
+ * pass on a clean clone with no Postgres (docs/12).
  */
 
 describe.skipIf(!hasTestDatabase)('render service', () => {
