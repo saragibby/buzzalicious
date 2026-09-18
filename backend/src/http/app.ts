@@ -8,8 +8,10 @@ import { createHttpLogger } from '../platform/logger';
 import { configurePassport } from '../modules/identity/passport';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { createAuthRouter } from './routes/auth.routes';
+import { createBrandRouter, multerErrorHandler } from './routes/brand.routes';
 import { createHealthRouter } from './routes/health.routes';
 import { createFilesRouter, shouldMountFilesRouter } from './routes/files.routes';
+import { createWorkspaceRouter } from './routes/workspace.routes';
 
 /**
  * Builds the Express application. Deliberately separate from `index.ts` so tests can
@@ -73,6 +75,8 @@ export function createApp(): Application {
 
   app.use('/api/health', createHealthRouter());
   app.use('/auth', createAuthRouter(passport));
+  app.use('/api/workspaces', createWorkspaceRouter());
+  app.use('/api/brands', createBrandRouter());
 
   if (shouldMountFilesRouter()) {
     app.use('/api/files', createFilesRouter());
@@ -91,6 +95,7 @@ export function createApp(): Application {
     });
   }
 
+  app.use(multerErrorHandler);
   app.use(errorHandler);
 
   return app;

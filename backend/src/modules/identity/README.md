@@ -1,6 +1,6 @@
 # `modules/identity/`
 
-**Owner:** W3 · **Status:** partial (sign-in ported in W0/M1)
+**Owner:** W3 · **Status:** implemented
 
 ## Responsibility
 
@@ -31,9 +31,31 @@ From the prototype's `backend/src/auth.ts`:
 - `/auth/me` returns an explicit projection. The prototype returned the `User` row
   verbatim, which on the old schema meant returning every stored OAuth token.
 
-## The W3 seam
+## First login
 
-`findOrCreateGoogleUser` marks where first login must also create a `Workspace` and an
-owning `Membership`. It could not be done in M1: those models do not exist until W2
-writes them, and `prisma/schema.prisma` is W2's exclusively. The `isNewUser` branch is
-the hook point.
+`findOrCreateGoogleUser`'s `isNewUser` branch calls `onboarding.ts`, which creates a
+`Workspace`, an owning `Membership`, and a default `Brand` in one transaction. A user who
+reaches the app without a workspace has nowhere to be, so this is not deferred to a
+setup wizard.
+
+`ensureWorkspace()` is the repair path for accounts that predate this — including the
+M1 sign-ins that ran while the seam was still empty. It is idempotent.
+
+## Authorization
+
+`authorization.ts` is the tenancy boundary the rest of the product inherits.
+`requireWorkspaceAccess` and `requireBrandAccess` resolve a caller's membership and return
+a **pre-scoped** client (`platform/tenancy.ts`), not a boolean. Handlers therefore cannot
+accidentally query outside the tenant: there is no unscoped client in reach.
+
+- No membership → **404**, deliberately identical to "no such brand". A 403 would confirm
+  that a brand id exists, which is an enumeration oracle.
+- Membership with an insufficient role → **403**.
+- Not signed in → **401**, resolved before any tenancy lookup.
+
+Resolving a brand's `workspaceId` is the one read that is legitimately unscoped —
+discovering a scope cannot itself require one. `User`, `Workspace` and `Membership` are
+not tenant models for the same reason.
+
+The Express adapters are `http/middleware/require-scope.ts`; they are thin on purpose, so
+the decision is testable without a request.

@@ -62,6 +62,28 @@ const PROMPTS: Record<AiPurpose, PromptTemplate> = {
     required: ['metrics'],
     user: (input) => `Metrics:\n${input.metrics}`,
   },
+  voice_guide_draft: {
+    // The strongest signal in the Tax Dedux prompt work (docs/11) was the banned list,
+    // not the positive description — so the system message asks for what the brand would
+    // never say with the same weight as what it would.
+    system:
+      'You draft a brand voice guide for a small business. Produce a starting point a ' +
+      'human will edit, not a finished artefact: be concrete and specific to this ' +
+      'business, and prefer leaving a list short over padding it with generic marketing ' +
+      'advice. Be as precise about what the brand would never say as about what it would. ' +
+      'Never invent facts about the business that you were not given.',
+    required: ['businessName', 'category'],
+    user: (input) =>
+      [
+        `Business name: ${input.businessName}`,
+        `Business category: ${input.category}`,
+        input.website ? `Website: ${input.website}` : null,
+        input.audience ? `Target audience: ${input.audience}` : null,
+        input.notes ? `What the owner says about themselves: ${input.notes}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+  },
 };
 
 /**

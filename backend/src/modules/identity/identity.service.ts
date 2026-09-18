@@ -2,6 +2,7 @@ import type { User } from '@prisma/client';
 import { getConfig } from '../../platform/config';
 import { getPrisma } from '../../platform/db';
 import { getLogger } from '../../platform/logger';
+import { createFirstWorkspace } from './onboarding';
 
 /**
  * Identity: who is signed in, and what they belong to.
@@ -39,10 +40,9 @@ export function isSignInAllowed(email: string): boolean {
  * Links by `googleId` first, then falls back to `email` so that a user who existed before
  * Google sign-in — or who is re-linking — is updated rather than duplicated.
  *
- * > **W3 seam.** This must also create a `Workspace` and an owning `Membership` on first
- * > login (docs/03-teardown.md, docs/tasks/W3-identity-brand.md). It cannot be done here
- * > yet: those models do not exist until W2 writes the schema, and W2 owns
- * > `prisma/schema.prisma` exclusively. The hook point is the `isNewUser` branch below.
+ * On first login the user also gets a `Workspace`, an owning `Membership` and a default
+ * `Brand` (`onboarding.ts`). That is the seam M1 documented and could not fill, because
+ * the models did not exist until W2 wrote them.
  */
 export async function findOrCreateGoogleUser(
   profile: GoogleProfileInput,
@@ -68,6 +68,12 @@ export async function findOrCreateGoogleUser(
         name: profile.name ?? existingByEmail.name,
       },
     });
+
+    // An account can predate its workspace: a user invited by email, or one created
+    // before this ran. Sign-in is the only moment we are certain to have their identity,
+    // so it is also the only reliable place to repair it.
+    await ensureWorkspace(user);
+
     return { user, isNewUser: false };
   }
 
@@ -80,10 +86,33 @@ export async function findOrCreateGoogleUser(
     },
   });
 
-  // W3: create the user's Workspace + owning Membership here.
-  getLogger().info({ userId: user.id }, 'Created user on first Google sign-in');
+  const { workspace } = await createFirstWorkspace(prisma, user);
+
+  getLogger().info(
+    { userId: user.id, workspaceId: workspace.id },
+    'Created user, workspace and default brand on first Google sign-in',
+  );
 
   return { user, isNewUser: true };
+}
+
+/**
+ * Give a user a workspace if they somehow have none.
+ *
+ * Signing in successfully and landing in a product with nothing reachable is a worse
+ * failure than being refused, and it is not self-healing: nothing else in the system
+ * notices a user with zero memberships.
+ */
+async function ensureWorkspace(user: User): Promise<void> {
+  const prisma = getPrisma();
+  const existing = await prisma.membership.findFirst({ where: { userId: user.id } });
+  if (existing) return;
+
+  const { workspace } = await createFirstWorkspace(prisma, user);
+  getLogger().info(
+    { userId: user.id, workspaceId: workspace.id },
+    'Created a workspace for a user who had none',
+  );
 }
 
 export async function findUserById(id: string): Promise<User | null> {
