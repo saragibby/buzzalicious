@@ -12,6 +12,8 @@
  * body, ever.
  */
 
+import { ZodError } from 'zod';
+
 export type ErrorCode =
   | 'VALIDATION_FAILED'
   | 'NOT_FOUND'
@@ -154,4 +156,36 @@ export function toErrorBody(error: unknown, requestId?: string): ErrorBody {
 
 export function statusFor(error: unknown): number {
   return isAppError(error) ? error.status : 500;
+}
+
+/**
+ * Turns a `ZodError` into the `ValidationError` it always should have been.
+ *
+ * Roughly twenty handlers across seven route files call `Schema.parse(req.body)` and hand
+ * the failure to `next(error)`. A `ZodError` is not an `AppError`, so `statusFor` fell
+ * through to its default and **every malformed request in the app answered 500**. A
+ * mistyped field looked identical to a crash: the client got "Something went wrong",
+ * the user got no idea which field was wrong, and the 5xx log — the thing that is
+ * supposed to mean "our bug" — filled up with other people's typos.
+ *
+ * Normalising centrally rather than at each call site is deliberate: the bug was that a
+ * single omission defeated every route at once, and a fix applied per-handler would be
+ * one forgotten `catch` away from reintroducing it.
+ *
+ * The issue list is safe to expose. Zod reports the shape of what the client itself
+ * sent — a path and a reason — and never server state. `details` deliberately carries no
+ * received values, only paths, so an echoed secret cannot ride back out in an error body.
+ */
+export function normalizeError(error: unknown): unknown {
+  if (!(error instanceof ZodError)) return error;
+
+  return new ValidationError('The request is not valid.', {
+    cause: error,
+    details: {
+      issues: error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    },
+  });
 }

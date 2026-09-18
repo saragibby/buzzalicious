@@ -384,6 +384,42 @@ describe.skipIf(!hasTestDatabase)('composer backend', () => {
       await client.delete(`/api/brands/${RISE.brandId}/posts/${created.body.draft.id}`).expect(204);
     });
 
+    it('rejects a misspelled field instead of silently dropping the edit', async () => {
+      // `.strict()` is on every draft schema, but nothing asserted it, so the guard could
+      // be relaxed to Zod's default and no test would notice.
+      //
+      // The failure it prevents is the dangerous kind: without it a client sending a
+      // renamed or mistyped field gets a 200 and an unchanged draft, so the user watches
+      // their edit vanish with nothing reported anywhere. This was found the hard way
+      // during W5 — `captions` typed for `captionOverrides`, write silently a no-op.
+      const client = await signedIn(RISE.ownerId);
+
+      const created = await client
+        .post(`/api/brands/${RISE.brandId}/posts`)
+        .send({ templateSlug: 'big-number' })
+        .expect(201);
+
+      const postId = created.body.draft.id;
+
+      await client
+        .patch(`/api/brands/${RISE.brandId}/posts/${postId}`)
+        .send({ baseCopy: 'real edit', captions: { X: 'dropped silently' } })
+        .expect(400);
+
+      // The positive control that makes the 400 mean something: the correctly spelled
+      // field on the same route is accepted. Without this, a route broken for every
+      // payload would pass the assertion above.
+      await client
+        .patch(`/api/brands/${RISE.brandId}/posts/${postId}`)
+        .send({ baseCopy: 'real edit', captionOverrides: { X: 'kept' } })
+        .expect(200);
+
+      const read = await client.get(`/api/brands/${RISE.brandId}/posts/${postId}`).expect(200);
+      expect(read.body.draft.baseCopy).toBe('real edit');
+
+      await client.delete(`/api/brands/${RISE.brandId}/posts/${postId}`).expect(204);
+    });
+
     it('answers 404 for a draft in another workspace', async () => {
       const created = await (
         await signedIn(RISE.ownerId)

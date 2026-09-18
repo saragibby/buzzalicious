@@ -1,6 +1,12 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { getLogger } from '../../platform/logger';
-import { NotFoundError, isAppError, statusFor, toErrorBody } from '../../platform/errors';
+import {
+  NotFoundError,
+  isAppError,
+  normalizeError,
+  statusFor,
+  toErrorBody,
+} from '../../platform/errors';
 
 /**
  * The single error boundary. Registered last, after every router.
@@ -15,15 +21,20 @@ export const notFoundHandler: RequestHandler = (req, _res, next) => {
   next(new NotFoundError(`Route ${req.method} ${req.path}`));
 };
 
-export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
+export const errorHandler: ErrorRequestHandler = (error: unknown, req, res, next) => {
   if (res.headersSent) {
     // Express cannot recover once a response has started streaming.
     next(error);
     return;
   }
 
+  // A ZodError from a route's `Schema.parse` is a client mistake, not ours. Normalising
+  // here — the one place every error passes through — is what keeps a mistyped field a
+  // 400 instead of a 500 across all of the routes that validate.
+  const normalized = normalizeError(error);
+
   const requestId = req.id as string | undefined;
-  const status = statusFor(error);
+  const status = statusFor(normalized);
   const logger = getLogger();
 
   // A 4xx is usually the client's problem; a 5xx is ours. Log them accordingly so the
@@ -31,8 +42,8 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   const payload = {
     requestId,
     status,
-    code: isAppError(error) ? error.code : 'INTERNAL_ERROR',
-    err: error,
+    code: isAppError(normalized) ? normalized.code : 'INTERNAL_ERROR',
+    err: normalized,
   };
 
   if (status >= 500) {
@@ -41,9 +52,13 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
     logger.warn(payload, 'Request rejected');
   }
 
-  if (error instanceof Object && 'retryAfterSeconds' in error && error.retryAfterSeconds) {
-    res.setHeader('Retry-After', String(error.retryAfterSeconds));
+  if (
+    normalized instanceof Object &&
+    'retryAfterSeconds' in normalized &&
+    normalized.retryAfterSeconds
+  ) {
+    res.setHeader('Retry-After', String(normalized.retryAfterSeconds));
   }
 
-  res.status(status).json(toErrorBody(error, requestId));
+  res.status(status).json(toErrorBody(normalized, requestId));
 };
