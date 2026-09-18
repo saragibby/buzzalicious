@@ -252,3 +252,73 @@ export async function clicksByDay(
 
   return [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
+
+/** An hour-of-week bucket in the brand's own terms. */
+export interface ClickHour {
+  /** 0 = Sunday, in the requested time zone. */
+  dayOfWeek: number;
+  /** 0–23, in the requested time zone. */
+  hour: number;
+  clicks: number;
+  botClicks: number;
+}
+
+/**
+ * Human clicks per local hour of the week.
+ *
+ * Added for W8's send-time cold start: a brand with a website and few posts still has an
+ * audience whose clicking has a shape, and that shape is a defensible first suggestion
+ * where post outcomes do not yet exist.
+ *
+ * Deliberately returns a raw day/hour histogram rather than W8's eight send-time slots.
+ * The daypart boundaries are a product decision that lives in `modules/brand`, and baking
+ * them in here would put the same rule in two modules — where it would be correct on the
+ * day it was written and then drift silently, since both copies would keep returning
+ * plausible histograms.
+ *
+ * Bot clicks are counted separately and never folded in, for the same reason `clicksByDay`
+ * separates them: link-preview crawlers hit every short link at publish time, so
+ * unfiltered they would pile up in whatever hour the brand publishes and the send-time
+ * recommender would confidently learn to post exactly when it already posts.
+ */
+export async function clicksByLocalHour(
+  db: ScopedDb,
+  window: ClickWindow,
+  timeZone: string,
+): Promise<ClickHour[]> {
+  const clicks = await db.linkClick.findMany({
+    where: { occurredAt: { gte: window.from, lte: window.to } },
+    select: { occurredAt: true, isBot: true },
+  });
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    weekday: 'short',
+    hour: '2-digit',
+  });
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const buckets = new Map<string, ClickHour>();
+
+  for (const click of clicks) {
+    const parts: Record<string, string> = {};
+    for (const part of formatter.formatToParts(click.occurredAt)) {
+      if (part.type !== 'literal') parts[part.type] = part.value;
+    }
+
+    const dayOfWeek = days.indexOf(parts.weekday ?? '');
+    // `hour12: false` renders midnight as 24 in some ICU versions — the same quirk
+    // `platform/time.ts` guards against.
+    const hour = Number(parts.hour) % 24;
+    if (dayOfWeek < 0 || !Number.isFinite(hour)) continue;
+
+    const key = `${dayOfWeek}:${hour}`;
+    const bucket = buckets.get(key) ?? { dayOfWeek, hour, clicks: 0, botClicks: 0 };
+    if (click.isBot) bucket.botClicks += 1;
+    else bucket.clicks += 1;
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.values()].sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.hour - b.hour);
+}
