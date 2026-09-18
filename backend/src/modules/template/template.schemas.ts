@@ -136,12 +136,14 @@ export const LayoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
  * roughly the top 8% and bottom 12%; rendering through it puts the CTA under the
  * platform's own buttons.
  */
-export const SafeAreaSchema = z.object({
-  top: z.number().min(0).max(0.5).optional(),
-  bottom: z.number().min(0).max(0.5).optional(),
-  left: z.number().min(0).max(0.5).optional(),
-  right: z.number().min(0).max(0.5).optional(),
-});
+export const SafeAreaSchema = z
+  .object({
+    top: z.number().min(0).max(0.5).optional(),
+    bottom: z.number().min(0).max(0.5).optional(),
+    left: z.number().min(0).max(0.5).optional(),
+    right: z.number().min(0).max(0.5).optional(),
+  })
+  .strict();
 
 export const AspectRatioKeySchema = z.enum([
   'SQUARE_1_1',
@@ -150,15 +152,36 @@ export const AspectRatioKeySchema = z.enum([
   'LANDSCAPE_16_9',
 ]);
 
-export const CanvasSchema = z.object({
-  /** Applied to every ratio unless `byRatio` overrides it. */
-  safeArea: SafeAreaSchema.optional(),
-  /**
-   * Per-ratio overrides. Safe areas are genuinely per-ratio — a story has chrome a square
-   * feed post does not — so one flat value cannot express what docs/05 requires.
-   */
-  byRatio: z.record(AspectRatioKeySchema, SafeAreaSchema).optional(),
-});
+/**
+ * How a template reserves space for platform chrome.
+ *
+ * W2 authored this accepting both a flat value and per-ratio overrides because docs/05
+ * described safe areas two different ways and the decision belonged to whoever actually
+ * rendered them. W4 resolved it, and this is the decided shape rather than a hedge.
+ *
+ * The effective safe area for a render is three layers merged **one edge at a time**,
+ * later winning:
+ *
+ *     PLATFORM_DEFAULT[ratio]  ⊕  safeArea  ⊕  byRatio[ratio]
+ *
+ * `PLATFORM_DEFAULT` lives in `modules/render/safe-area.ts` and is the renderer's, not the
+ * template's: only `STORY_9_16` has one, for the Stories overlay. A template author never
+ * writes it down, and only reaches for `byRatio` when a specific ratio genuinely needs a
+ * different inset.
+ *
+ * Merging per edge rather than per object is what makes that work — a `byRatio` entry
+ * setting only `left` must not silently discard the `top` the platform reserved.
+ *
+ * See docs/05 for why neither flat-only nor per-ratio-only was chosen.
+ */
+export const CanvasSchema = z
+  .object({
+    /** The design's own margin, applied at every ratio. */
+    safeArea: SafeAreaSchema.optional(),
+    /** Per-ratio overrides, merged over `safeArea` edge by edge. */
+    byRatio: z.record(AspectRatioKeySchema, SafeAreaSchema).optional(),
+  })
+  .strict();
 
 export const TemplateLayoutSchema = z
   .object({
