@@ -35,20 +35,15 @@ jobs:
           --health-retries 5
 
     env:
-      # Fixed fake values. Config is validated at boot, so the build and the
-      # tests need a complete environment. None of these are real, and none of
-      # them may ever be — CI must never hold a live credential.
-      NODE_ENV: test
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/buzzalicious_test
+      # Deliberately minimal. The test environment lives in one place —
+      # backend/tests/setup.ts — and every variable there is assigned with `??=`, so
+      # anything set here silently wins over it. The first version of this file
+      # duplicated the whole fake environment and mistyped ENCRYPTION_KEY by four
+      # characters, which CI then fed to every test in place of the correct value.
+      #
+      # So: set only what setup.ts cannot know, which is where Postgres is. Nothing
+      # here is or may ever be a real credential.
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/buzzalicious_test
-      APP_URL: http://127.0.0.1:3001
-      WEB_URL: http://127.0.0.1:5173
-      SESSION_SECRET: ci-session-secret-that-is-long-enough-ok
-      GOOGLE_CLIENT_ID: ci-google-client-id
-      GOOGLE_CLIENT_SECRET: ci-google-client-secret
-      ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
-      STORAGE_DRIVER: local
-      LOG_LEVEL: silent
 
     steps:
       - uses: actions/checkout@v4

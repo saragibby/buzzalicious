@@ -99,8 +99,15 @@ text, not class names). `fetch` is stubbed; jsdom has no server to talk to.
 every pull request, with a Postgres service and `TEST_DATABASE_URL` set. Build is last: it
 is the slowest step and the least likely to be the thing that is broken.
 
-CI holds fixed fake credentials only. A real one must never appear in the workflow file,
-in a repository secret used by tests, or in a fixture.
+CI holds no credentials at all, real or fake. The test environment lives in
+`backend/tests/setup.ts` and nowhere else — every variable there is assigned with `??=`,
+so anything the workflow exports silently overrides it. The workflow sets only
+`TEST_DATABASE_URL`, which is the one thing `setup.ts` cannot know.
+
+This is not a style preference. The first version of the workflow duplicated the whole
+fake environment and mistyped `ENCRYPTION_KEY` by four characters; CI then fed that
+invalid key to every test and the suite failed in a way that passed locally. One
+definition of the test environment, or two that disagree.
 
 ## Current state (end of M1)
 
