@@ -296,6 +296,120 @@ describe.skipIf(!hasTestDatabase)('account health and revocation', () => {
       expect(rowB.lastValidatedAt).not.toBeNull();
     });
 
+    /**
+     * A reader that hands the sweep exactly the row we say, however wrong that row is.
+     *
+     * This is the failure being modelled: the sweep's own selection query is the only
+     * thing deciding which account belongs to which tenant, and it is a plain `findMany`
+     * with a hand-written `select` and a relation hop for `workspaceId`. A wrong join, a
+     * mis-mapped field, or a future `take`/`orderBy` change that pairs one row's id with
+     * another's brand produces precisely this: a `DueAccount` naming tenant A but
+     * carrying tenant B's account id.
+     */
+    function poisonedReader(row: {
+      id: string;
+      brandId: string;
+      workspaceId: string;
+      credentialId: string;
+      externalId: string;
+    }): SystemAccountReader {
+      return {
+        findAccountsDueForHealthCheck: async () => [
+          {
+            id: row.id,
+            brandId: row.brandId,
+            workspaceId: row.workspaceId,
+            platform: 'X' as const,
+            externalId: row.externalId,
+            credentialId: row.credentialId,
+            status: 'ACTIVE' as const,
+            expiresAt: null,
+            lastValidatedAt: null,
+          },
+        ],
+      };
+    }
+
+    /**
+     * The scoped write is load-bearing, so it has to be provable.
+     *
+     * `withTenantScope` is what stops a poisoned reader row becoming a cross-tenant write,
+     * and removing it grants *more* access rather than less — which is why every other
+     * test in this describe block passes identically with the raw client substituted in.
+     * Each of those asserts that the rows it expected **were** written; none asserts that
+     * a row outside the scope **cannot** be.
+     */
+    it('cannot write an account outside the scope, even when the reader names the wrong tenant', async () => {
+      const a = await makeFixture('sweep-poison-a');
+      const b = await makeFixture('sweep-poison-b');
+      const adapter = fakeAdapter({});
+
+      // Tenant A's workspace, brand and credential — carrying tenant B's account id.
+      // A's credential is used deliberately: it resolves cleanly, so the *only* thing
+      // standing between this sweep and B's row is the tenant scope. Had we used B's
+      // credential, an unscoped run would fail on credential resolution instead and the
+      // test would go green for a reason that has nothing to do with scoping.
+      const result = await runHealthSweep({
+        db,
+        reader: poisonedReader({
+          id: b.accountId,
+          brandId: a.brandId,
+          workspaceId: a.workspaceId,
+          credentialId: a.credentialId,
+          externalId: 'x-sweep-poison-b',
+        }),
+        registry: adapter.registry,
+      });
+
+      // The scoped read finds nothing, so the adapter is never consulted about B at all.
+      expect(adapter.validated).not.toContain('x-sweep-poison-b');
+
+      // B's row, by identity. `lastValidatedAt` is the field the sweep would stamp, and
+      // it is still exactly the null it was created with.
+      const rowB = await db.socialAccount.findUniqueOrThrow({ where: { id: b.accountId } });
+      expect(rowB.lastValidatedAt).toBeNull();
+      expect(rowB.status).toBe('ACTIVE');
+      expect(rowB.lastError).toBeNull();
+
+      // A's row is untouched too: the sweep was never legitimately pointed at it.
+      const rowA = await db.socialAccount.findUniqueOrThrow({ where: { id: a.accountId } });
+      expect(rowA.lastValidatedAt).toBeNull();
+
+      // The sweep still counts the row it was handed, and still does not throw — one bad
+      // account must not stop the pass.
+      expect(result.checked).toBe(1);
+    });
+
+    /**
+     * The positive control for the test above.
+     *
+     * Without this, a `poisonedReader` that was simply broken — a shape the sweep rejects
+     * before it reaches any scope check — would produce the same green, and the leak test
+     * would be asserting nothing at all.
+     */
+    it('writes the row through that same reader when the tenant genuinely matches', async () => {
+      const a = await makeFixture('sweep-control-a');
+      const adapter = fakeAdapter({});
+
+      const result = await runHealthSweep({
+        db,
+        reader: poisonedReader({
+          id: a.accountId,
+          brandId: a.brandId,
+          workspaceId: a.workspaceId,
+          credentialId: a.credentialId,
+          externalId: 'x-sweep-control-a',
+        }),
+        registry: adapter.registry,
+      });
+
+      expect(adapter.validated).toContain('x-sweep-control-a');
+
+      const rowA = await db.socialAccount.findUniqueOrThrow({ where: { id: a.accountId } });
+      expect(rowA.lastValidatedAt).not.toBeNull();
+      expect(result.checked).toBe(1);
+    });
+
     it('handles two brands in one workspace, writing each under its own brand scope', async () => {
       const workspaceId = await makeWorkspace('sweep-two-brands');
       const first = await makeFixture('sweep-brand-1', { workspaceId });
