@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { logout } from '../lib/api';
 import { currentUserQueryKey, useCurrentUser } from '../lib/useCurrentUser';
+import { ScopeSwitcher } from './ScopeSwitcher';
 import logo from '../logo.png';
 
 const NAV = [
@@ -9,6 +10,7 @@ const NAV = [
   { to: '/composer', label: 'Composer' },
   { to: '/calendar', label: 'Calendar' },
   { to: '/insights', label: 'Insights' },
+  { to: '/brand', label: 'Brand kit' },
   { to: '/settings', label: 'Settings' },
 ] as const;
 
@@ -43,6 +45,7 @@ export function AppLayout() {
             </NavLink>
           ))}
         </nav>
+        <ScopeSwitcher />
         <div className="app-user">
           {user?.email}
           <button type="button" onClick={() => void handleLogout()}>
