@@ -11,9 +11,9 @@ import {
 import {
   PLATFORM_SPECS,
   isSupportedPlatform,
-  measureCaption,
   type SupportedPlatform,
 } from '../template/platform-spec';
+import { measureWithLink } from '../link/link-injection';
 import type { CreateDraftInput, UpdateDraftInput } from './post.schemas';
 
 /**
@@ -274,7 +274,10 @@ async function setCaptionOverrides(
 
     if (value !== null) {
       // Counted the way the platform counts, not with `.length` — see `countCaption`.
-      const count = measureCaption(platform, value);
+      // Link-aware: the marker becomes a real URL at publish, so measuring the raw
+      // text would show the user a count publish then disagrees with. Same helper as
+      // the schedule gate and the publish path, so the three cannot drift apart.
+      const count = measureWithLink(platform, value);
       if (count.over) {
         throw new ValidationError(
           `That caption is ${count.used} characters as ${PLATFORM_SPECS[platform].label} ` +
