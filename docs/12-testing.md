@@ -179,9 +179,9 @@ branch to merge is fine, and the second and third are the ones exposed. So:
 
 ## Current state (end of M3, plus the W6 spine)
 
-607 tests across 58 files.
+608 tests across 58 files.
 
-Running without a database, 502 of them: crypto round-trip and tamper detection, the
+Running without a database, 503 of them: crypto round-trip and tamper detection, the
 Prisma encryption extension against a mock, config validation, the storage driver and its
 signed URLs, local-to-UTC time conversion across DST, the HTTP error boundary and app
 smoke tests, the AI prompt and parse layer, every JSON column's Zod contract, and the
