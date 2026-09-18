@@ -149,3 +149,372 @@ button:hover {
   color: var(--text-muted);
   font-size: 0.9rem;
 }
+
+/*
+ * Brand kit, scope switcher and asset library (W3).
+ *
+ * Appended rather than woven in, so W5 can delete this block wholesale when the real
+ * design system lands. Nothing above this line was changed.
+ */
+
+.scope-switcher {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 1rem;
+}
+
+.scope-switcher-loading {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.scope-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.scope-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.brand-kit {
+  max-width: 60rem;
+}
+
+.brand-kit-header h1 {
+  margin-bottom: 0.25rem;
+}
+
+.brand-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin: 0 0 1.5rem;
+}
+
+.brand-section legend {
+  padding: 0 0.5rem;
+  font-weight: 600;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.field-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.field input[type='text'],
+.field input[type='url'],
+.field input[type='search'],
+.field textarea,
+.field select {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.palette-grid,
+.type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.palette-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.palette-role {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.palette-swatch input[type='color'] {
+  width: 100%;
+  height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  background: var(--surface);
+}
+
+.palette-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.palette-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.palette-contrast {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+}
+
+.palette-contrast.ok {
+  color: var(--text-muted);
+}
+
+.palette-contrast.warn {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.palette-suggest {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.type-preview {
+  font-size: 1.6rem;
+  margin: 1rem 0 0.25rem;
+}
+
+.type-preview-body {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.chip-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0.25rem 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.3rem 0.2rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.chip button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-muted);
+  padding: 0 0.25rem;
+}
+
+.chip-add {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.chip-add input {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.category-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.4rem;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.category-option {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+}
+
+.category-option.selected {
+  border-color: var(--accent);
+  background: var(--surface-muted);
+}
+
+.category-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.category-parent {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.category-selected {
+  margin: 0 0 0.75rem;
+}
+
+.category-selected button {
+  margin-left: 0.5rem;
+}
+
+.category-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  grid-column: 1 / -1;
+}
+
+.platform-toggles {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.platform-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.voice-draft {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
+.brand-kit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.form-error {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.form-success {
+  color: var(--text-muted);
+}
+
+.asset-library {
+  border-top: 1px solid var(--border);
+  padding-top: 1.5rem;
+}
+
+.asset-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.asset-header h2 {
+  margin: 0;
+}
+
+.asset-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.asset-grid {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+
+.asset-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.asset-card img {
+  width: 100%;
+  height: 9rem;
+  object-fit: cover;
+  background: var(--surface-muted);
+  display: block;
+}
+
+.asset-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.asset-actions {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0 0.6rem 0.6rem;
+  flex-wrap: wrap;
+}
+
+.asset-badge {
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 600;
+  align-self: center;
+}
+
+.asset-actions .danger {
+  color: var(--accent);
+}
