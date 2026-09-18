@@ -48,19 +48,42 @@ its tenancy depends on this workstream: credentials are scopeable at both worksp
 brand level, so `requireBrand` and the workspace-membership check must both be solid before
 W6 builds on them.
 
-> **Blocked on [Q15](../09-open-questions.md):** whether Rise & Shore and TaxDedux are
-> separate workspaces or brands in one workspace. It changes seed data, the switcher, and
-> what "cross-tenant access" means in the test below. Resolve before building the switcher.
+> **Q15 is resolved.** Rise & Shore and TaxDedux are separate *workspaces* — see
+> [ADR-0010](../adr/0010-workspace-per-client.md) and
+> [09-open-questions](../09-open-questions.md). The W2 seed already creates them that way,
+> and "cross-tenant access" in the tests below therefore means both cross-workspace and
+> cross-brand.
 
 ## Acceptance criteria
 
-- [ ] New user signs in → workspace + default brand created
-- [ ] Complete brand kit can be created, edited, and reloaded
-- [ ] Voice guide validates against the Zod schema and rejects malformed input
-- [ ] Logo upload lands in storage with a correct `Asset` row
-- [ ] Cross-brand access is denied (integration test)
-- [ ] **Cross-workspace access is denied** (integration test)
-- [ ] Switching brands changes the scoped data
+- [x] New user signs in → workspace + default brand created —
+      `modules/identity/onboarding.ts`, called from the `isNewUser` branch of
+      `findOrCreateGoogleUser`
+- [x] Complete brand kit can be created, edited, and reloaded — `modules/brand/` and
+      `routes/BrandKit.tsx`
+- [x] Voice guide validates against the Zod schema and rejects malformed input — the
+      schemas in `brand.schemas.ts` are the only validator; the update payload is
+      `.strict()`, so an unknown key is a 422 rather than a silent drop
+- [x] Logo upload lands in storage with a correct `Asset` row — `asset.service.ts`, via
+      `platform/storage.ts`
+- [x] Cross-brand access is denied (integration test) — `tests/db/tenancy.test.ts`
+- [x] **Cross-workspace access is denied** (integration test) —
+      `tests/db/tenancy.test.ts`, asserting a genuine 404 rather than an empty result
+- [x] Switching brands changes the scoped data — `lib/ScopeProvider.tsx`; the scope is a
+      query key, so a switch refetches rather than re-filtering on the client
+
+### How scoping fails closed
+
+ADR-0010 asks for a mechanism rather than a convention. `platform/tenancy.ts` wraps the
+Prisma client in an extension that injects the tenant filter into every query against a
+tenant model, and **throws** if such a model is reached without a scope. A route that
+forgets to scope does not quietly go global; it raises `UnscopedTenantAccessError`. The
+scope is AND-ed in, so a caller's own `where` cannot displace it.
+
+Denial semantics, chosen deliberately: no membership → **404**, byte-identical to "no such
+brand", because a 403 turns a brand id into an enumeration oracle. Insufficient *role*
+within a workspace the caller can already see → **403**. 401 is resolved before tenancy, so
+an anonymous caller learns nothing about which ids exist.
 
 ## Notes
 

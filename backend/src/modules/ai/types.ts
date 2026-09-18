@@ -19,7 +19,12 @@ export type AiProviderName = 'openai' | 'azure-openai' | 'gemini';
 
 /** The things this product asks a model to do. Adding a case means adding a prompt. */
 export type AiPurpose =
-  'caption_draft' | 'caption_rewrite' | 'hashtag_suggest' | 'trend_summarize' | 'insight_explain';
+  | 'caption_draft'
+  | 'caption_rewrite'
+  | 'hashtag_suggest'
+  | 'trend_summarize'
+  | 'insight_explain'
+  | 'voice_guide_draft';
 
 export interface AiUsage {
   promptTokens?: number;

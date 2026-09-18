@@ -59,6 +59,11 @@ signal.
   remembered.** A missing `workspaceId` filter is a cross-tenant data leak. Prefer a
   mechanism that fails closed — a scoped Prisma client extension or a `requireWorkspace`
   middleware that every route uses — over developer discipline.
+  **Implemented in W3** as `platform/tenancy.ts`: a Prisma extension that AND-s the tenant
+  filter into every query against a tenant model and throws `UnscopedTenantAccessError` if
+  one is reached without a scope. `requireWorkspaceAccess`/`requireBrandAccess` return a
+  pre-scoped client rather than a boolean, so a handler has no unscoped client in reach.
+  Proven against the two-tenant seed in `backend/tests/db/tenancy.test.ts`.
 - Authorization is two-level: workspace membership, then brand access within it.
 - **Aggregation jobs cross the tenant boundary by design.** Template and trend scoring read
   every workspace's outcomes. Isolate them behind an explicit, auditable service so this is

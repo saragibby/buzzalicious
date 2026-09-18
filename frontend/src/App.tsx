@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppLayout } from './components/AppLayout';
 import { RequireAuth } from './components/RequireAuth';
+import { ScopeProvider } from './lib/ScopeProvider';
+import { BrandKit } from './routes/BrandKit';
 import { Login } from './routes/Login';
 import { TrendFeed } from './routes/trends/TrendFeed';
 import { TrendCurate } from './routes/trends/TrendCurate';
@@ -35,7 +37,11 @@ export function App() {
           <Route
             element={
               <RequireAuth>
-                <AppLayout />
+                {/* Inside RequireAuth: the scope queries are authenticated, and fetching
+                    them for a signed-out visitor is a guaranteed 401 on every page load. */}
+                <ScopeProvider>
+                  <AppLayout />
+                </ScopeProvider>
               </RequireAuth>
             }
           >
@@ -46,6 +52,7 @@ export function App() {
             <Route path="composer" element={<Composer />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="insights" element={<Insights />} />
+            <Route path="brand" element={<BrandKit />} />
             <Route path="settings" element={<Settings />} />
           </Route>
           <Route path="/404" element={<NotFound />} />
