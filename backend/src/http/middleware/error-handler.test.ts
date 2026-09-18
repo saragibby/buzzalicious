@@ -134,6 +134,23 @@ describe('errorHandler and schema validation', () => {
     expect(response.status).toBe(500);
     expect(JSON.stringify(response.body)).not.toContain('cannot read x');
   });
+
+  it('never echoes the rejected value back, only the path and the reason', async () => {
+    // `details` is returned to the client, so this conversion is an exposure path that did
+    // not exist before. docs/10 is absolute that a credential secret is never returned
+    // "not even to the client that sent it" — and a body carrying one can certainly fail
+    // validation. Only `path`, `code` and Zod's own message are mapped; `received` is
+    // deliberately dropped, and no secret field is an enum or literal, which are the only
+    // Zod issue kinds whose message embeds the value.
+    const secretish = z.object({ appSecret: z.string().max(5) }).strict();
+    const response = await request(
+      appThrowing(secretish.safeParse({ appSecret: 'super-secret-token' }).error),
+    ).get('/boom');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details.issues[0].path).toBe('appSecret');
+    expect(JSON.stringify(response.body)).not.toContain('super-secret-token');
+  });
 });
 
 describe('requireAuth', () => {
