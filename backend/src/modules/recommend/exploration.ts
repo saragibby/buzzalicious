@@ -1,5 +1,6 @@
 import { getConfig } from '../../platform/config';
 import { shrunkValue, type ShrunkScore } from './shrinkage';
+import { localWeekStart } from './cadence.service';
 
 /**
  * Reserving part of every result set for things we have not learned about yet.
@@ -32,6 +33,25 @@ import { shrunkValue, type ShrunkScore } from './shrinkage';
  *
  * Ties break toward the higher shrunk score: optimism under uncertainty. Among things we
  * know equally little about, try the one the category prior likes.
+ *
+ * ## Determinism alone starves, so the ordering rotates
+ *
+ * `brandWeight` is `n / (n + k)`, and `n` counts posts the brand actually *made* with a
+ * candidate — not times we showed it. So a candidate that is offered and declined is,
+ * next refresh, in precisely the state that got it offered: uncertainty `1`, tie-broken to
+ * the front, chosen again. With a small reservation that is often a single slot, and one
+ * declined candidate is enough to pin it permanently. Every other untried candidate waits
+ * behind it forever, while the feature reports as working and every test stays green — the
+ * explored set has size one.
+ *
+ * Randomness would fix this by accident and cost reproducibility: a result set that
+ * changes on refresh is a support burden, and makes every assertion here probabilistic.
+ * Instead the selection window rotates over a **caller-supplied bucket**. Within a bucket
+ * the output is exactly reproducible; across buckets a declined candidate yields its slot.
+ *
+ * The bucket is a required parameter and is never read from the clock here. A default
+ * would be `0`, which is the starving behaviour restored silently at any call site that
+ * forgot to pass one — and that is the bug, not a degraded version of it.
  */
 
 export type SelectionKind = 'exploit' | 'explore';
@@ -59,9 +79,36 @@ export interface ExplorationInputs<T> {
   readonly scoreOf: (item: T) => ShrunkScore;
   /** How many slots the result set has. */
   readonly count: number;
+  /**
+   * Which rotation window to take. Required, and deliberately not defaulted.
+   *
+   * Callers pass `rotationBucket(now, brand.timeZone)`. Tests pass an integer directly, so
+   * they stay exact. Equal buckets give identical output; consecutive buckets move the
+   * window on, which is what stops a declined candidate holding the slot forever.
+   */
+  readonly rotation: number;
   /** Overrides `RECOMMEND_EXPLORATION_FRACTION`. */
   readonly fraction?: number;
 }
+
+/**
+ * The rotation window for an instant: a week index in the brand's own zone.
+ *
+ * A week is long enough that a user refreshing a page, or coming back the next day to
+ * finish something, sees the same recommendations — and short enough that a declined
+ * candidate yields its slot while the decline is still relevant.
+ *
+ * Shares `localWeekStart` with cadence rather than defining a second notion of "week".
+ * Two week definitions in one module would drift, and the failure would be a quiet
+ * off-by-one in what got explored rather than anything that looks like a bug.
+ */
+export function rotationBucket(instant: Date, timeZone: string): number {
+  const monday = localWeekStart(instant, timeZone);
+  const days = Date.parse(`${monday}T00:00:00Z`) / MS_PER_DAY;
+  return Math.round(days / 7);
+}
+
+const MS_PER_DAY = 86_400_000;
 
 /**
  * Fill `count` slots, reserving a share of them for the least-known candidates.
@@ -90,7 +137,7 @@ export function withExploration<T>(inputs: ExplorationInputs<T>): Selection<T>[]
   const exploit = ranked.slice(0, exploitSlots);
   const taken = new Set<T>(exploit);
 
-  const explore = [...ranked]
+  const pool = [...ranked]
     .filter((item) => !taken.has(item))
     .sort((a, b) => {
       const byUncertainty = uncertaintyOf(b) - uncertaintyOf(a);
@@ -99,8 +146,9 @@ export function withExploration<T>(inputs: ExplorationInputs<T>): Selection<T>[]
       // prior likes. Without a tiebreak the order would fall out of input order, which is
       // the ranking — and exploration would quietly become exploitation's tail.
       return shrunkValue(scoreOf(b)) - shrunkValue(scoreOf(a));
-    })
-    .slice(0, exploreSlots);
+    });
+
+  const explore = rotate(pool, rotateOver(pool, scoreOf), inputs.rotation, exploreSlots);
 
   return [
     ...exploit.map((item) => ({
@@ -114,6 +162,59 @@ export function withExploration<T>(inputs: ExplorationInputs<T>): Selection<T>[]
       uncertainty: uncertaintyOf(item),
     })),
   ];
+}
+
+/**
+ * Which part of the pool the rotation is allowed to move over.
+ *
+ * Only genuinely under-sampled candidates. Rotating over the whole pool would eventually
+ * hand an exploration slot to something we have already measured properly, which is
+ * exploitation wearing an `explore` label — a mislabel of exactly the kind the `kind`
+ * field exists to prevent.
+ *
+ * Falls back to the whole pool when nothing is under-sampled, because the acceptance
+ * criterion is that an exploration slot appears in *every* result set. For a brand that
+ * has measured everything well, the least-known candidate is still the honest pick.
+ */
+function rotateOver<T>(pool: readonly T[], scoreOf: (item: T) => ShrunkScore): readonly T[] {
+  const minSample = getConfig().recommend.minSampleForClaim;
+  const underSampled = pool.filter((item) => scoreOf(item).basis.observations < minSample);
+  return underSampled.length > 0 ? underSampled : pool;
+}
+
+/**
+ * Take `slots` items from `source`, starting `rotation` windows in, then top up from
+ * `pool` in order if `source` could not fill the reservation.
+ *
+ * The offset steps by whole windows rather than by one, so consecutive buckets show
+ * disjoint sets and every under-sampled candidate gets a turn within
+ * `ceil(source.length / slots)` buckets. Stepping by one would overlap the windows and
+ * take proportionally longer to cover the pool.
+ */
+function rotate<T>(pool: readonly T[], source: readonly T[], rotation: number, slots: number): T[] {
+  if (slots <= 0 || source.length === 0) return [];
+
+  const window = Math.max(1, slots);
+  // Modulo twice: a negative rotation is a caller error rather than a crash, and `%` in
+  // JS keeps the sign of the left operand.
+  const offset =
+    (((Math.trunc(rotation) * window) % source.length) + source.length) % source.length;
+
+  const picked: T[] = [];
+  const seen = new Set<T>();
+  for (let i = 0; i < source.length && picked.length < slots; i += 1) {
+    const item = source[(offset + i) % source.length];
+    if (seen.has(item)) continue;
+    seen.add(item);
+    picked.push(item);
+  }
+  for (const item of pool) {
+    if (picked.length >= slots) break;
+    if (seen.has(item)) continue;
+    seen.add(item);
+    picked.push(item);
+  }
+  return picked;
 }
 
 /**

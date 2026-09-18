@@ -251,6 +251,20 @@ const baseSchema = z.object({
   RECOMMEND_EXPLORATION_FRACTION: z.coerce.number().min(0).max(1).default(0.2),
 
   /**
+   * How much better than typical an archetype must have performed before we will put a
+   * multiplier in front of the user.
+   *
+   * A sample large enough to pass `RECOMMEND_MIN_SAMPLE_FOR_CLAIM` can still be entirely
+   * unremarkable. "Your Before/After posts drove 1.0x your average" is a true sentence
+   * that reads as a finding and contains none, and "0.8x your average" recommends a
+   * template by reporting that it underperforms. Both are worse than the category framing
+   * we would otherwise have shown, so below this floor we show that instead.
+   *
+   * Gates the sentence only. The score, the ranking and the basis are untouched.
+   */
+  RECOMMEND_MIN_CLAIM_MULTIPLIER: z.coerce.number().min(1).default(1.2),
+
+  /**
    * The same, for send-time slots, and deliberately higher.
    *
    * docs/06: a pure-exploitation scheduler posts at the first slot that looked good and
@@ -481,6 +495,7 @@ const schema = baseSchema
       shrinkageK: env.SHRINKAGE_K,
       minSampleForClaim: env.RECOMMEND_MIN_SAMPLE_FOR_CLAIM,
       explorationFraction: env.RECOMMEND_EXPLORATION_FRACTION,
+      minClaimMultiplier: env.RECOMMEND_MIN_CLAIM_MULTIPLIER,
       sendTimeExplorationFraction: env.RECOMMEND_SENDTIME_EXPLORATION_FRACTION,
       minSampleForMedian: env.RECOMMEND_MIN_SAMPLE_FOR_MEDIAN,
       cadenceWeeks: env.RECOMMEND_CADENCE_WEEKS,

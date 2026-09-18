@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { withExploration, withSendTimeExploration } from './exploration';
+import { rotationBucket, withExploration, withSendTimeExploration } from './exploration';
 import { shrink, type ShrunkScore } from './shrinkage';
 
 interface Candidate {
@@ -37,7 +37,7 @@ describe('exploration slots appear in every result set', () => {
       candidate('untried', 0, null),
     ];
 
-    const selection = withExploration({ ranked, scoreOf, count: 3, fraction: 0.2 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 3, fraction: 0.2 });
 
     expect(kinds(selection)).toContain('explore');
     expect(names(selection)).toContain('untried');
@@ -48,7 +48,7 @@ describe('exploration slots appear in every result set', () => {
     // pure-exploitation list for every small result set.
     const ranked = [candidate('best', 100, 3), candidate('untried', 0, null)];
 
-    const selection = withExploration({ ranked, scoreOf, count: 2, fraction: 0.2 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 2, fraction: 0.2 });
 
     expect(kinds(selection)).toEqual(['exploit', 'explore']);
     expect(names(selection)).toEqual(['best', 'untried']);
@@ -63,7 +63,7 @@ describe('exploration slots appear in every result set', () => {
       candidate('untried', 0, null),
     ];
 
-    const selection = withExploration({ ranked, scoreOf, count: 3, fraction: 0.2 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 3, fraction: 0.2 });
 
     expect(kinds(selection).filter((k) => k === 'exploit')).toHaveLength(2);
     expect(names(selection).slice(0, 2)).toEqual(['best', 'second']);
@@ -74,7 +74,7 @@ describe('exploration slots appear in every result set', () => {
     // here would return an empty exploit list to satisfy a quota.
     const ranked = [candidate('only', 100, 3)];
 
-    const selection = withExploration({ ranked, scoreOf, count: 3, fraction: 0.2 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 3, fraction: 0.2 });
 
     expect(kinds(selection)).toEqual(['exploit']);
   });
@@ -82,7 +82,7 @@ describe('exploration slots appear in every result set', () => {
   it('returns nothing for zero slots rather than one exploration pick', () => {
     const ranked = [candidate('a', 100, 3), candidate('b', 0, null)];
 
-    expect(withExploration({ ranked, scoreOf, count: 0, fraction: 0.2 })).toEqual([]);
+    expect(withExploration({ ranked, scoreOf, rotation: 0, count: 0, fraction: 0.2 })).toEqual([]);
   });
 });
 
@@ -97,7 +97,7 @@ describe('exploration prefers what we know least about', () => {
       candidate('untried', 0, null),
     ];
 
-    const selection = withExploration({ ranked, scoreOf, count: 2, fraction: 0.5 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 2, fraction: 0.5 });
 
     expect(names(selection)).toEqual(['best', 'untried']);
   });
@@ -107,7 +107,7 @@ describe('exploration prefers what we know least about', () => {
     // change to the ordering rule cannot be mistaken for a change to the definition.
     const ranked = [candidate('observed', 15, 2), candidate('untried', 0, null)];
 
-    const selection = withExploration({ ranked, scoreOf, count: 2, fraction: 0.5 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 2, fraction: 0.5 });
     const byName = new Map(selection.map((s) => [s.item.name, s.uncertainty]));
 
     expect(byName.get('observed')).toBeCloseTo(5 / 20, 6);
@@ -130,6 +130,7 @@ describe('exploration prefers what we know least about', () => {
     const selection = withExploration({
       ranked: [candidate('best', 200, 3), pessimistic, optimistic],
       scoreOf,
+      rotation: 0,
       count: 2,
       fraction: 0.5,
     });
@@ -140,7 +141,7 @@ describe('exploration prefers what we know least about', () => {
   it('never picks the same candidate twice', () => {
     const ranked = [candidate('a', 0, null), candidate('b', 0, null), candidate('c', 0, null)];
 
-    const selection = withExploration({ ranked, scoreOf, count: 3, fraction: 0.34 });
+    const selection = withExploration({ ranked, scoreOf, rotation: 0, count: 3, fraction: 0.34 });
 
     expect(new Set(names(selection)).size).toBe(selection.length);
     expect(selection).toHaveLength(3);
@@ -155,8 +156,14 @@ describe('send-time explores harder than templates', () => {
       candidate(`slot-${i}`, 100 - i * 10, 2 - i * 0.1),
     );
 
-    const templates = withExploration({ ranked, scoreOf, count: 8, fraction: 0.2 });
-    const sendTime = withSendTimeExploration({ ranked, scoreOf, count: 8, fraction: 0.25 });
+    const templates = withExploration({ ranked, scoreOf, rotation: 0, count: 8, fraction: 0.2 });
+    const sendTime = withSendTimeExploration({
+      ranked,
+      scoreOf,
+      rotation: 0,
+      count: 8,
+      fraction: 0.25,
+    });
 
     const explored = (s: { kind: string }[]) => s.filter((x) => x.kind === 'explore').length;
 
@@ -164,7 +171,126 @@ describe('send-time explores harder than templates', () => {
     expect(explored(sendTime)).toBe(2);
 
     // POSITIVE CONTROL that the fraction is actually read: a larger one reserves more.
-    const aggressive = withSendTimeExploration({ ranked, scoreOf, count: 8, fraction: 0.5 });
+    const aggressive = withSendTimeExploration({
+      ranked,
+      scoreOf,
+      rotation: 0,
+      count: 8,
+      fraction: 0.5,
+    });
     expect(explored(aggressive)).toBe(4);
+  });
+});
+
+describe('rotation stops a declined candidate holding the slot forever', () => {
+  // Six candidates the brand has never used. Every one has uncertainty 1, so without
+  // rotation the tiebreak alone decides, and it decides the same way on every refresh
+  // forever: `brandWeight` moves when a candidate is *used*, never when it is shown. One
+  // decline is enough to pin the slot, and the explored set has size one.
+  const untried = () => [
+    candidate('proven', 500, 4),
+    candidate('u-a', 0, null),
+    candidate('u-b', 0, null),
+    candidate('u-c', 0, null),
+    candidate('u-d', 0, null),
+    candidate('u-e', 0, null),
+  ];
+
+  const exploredAt = (rotation: number) =>
+    names(
+      withExploration({
+        ranked: untried(),
+        scoreOf,
+        rotation,
+        count: 3,
+        fraction: 0.5,
+      }).filter((s) => s.kind === 'explore'),
+    );
+
+  it('shows a different set in the next bucket', () => {
+    expect(exploredAt(0)).not.toEqual(exploredAt(1));
+  });
+
+  it('covers every under-sampled candidate across consecutive buckets', () => {
+    // The property that actually matters. "Different" is satisfiable by swapping two items
+    // back and forth forever while the other three starve exactly as before.
+    const seen = new Set([0, 1, 2].flatMap(exploredAt));
+    expect([...seen].sort()).toEqual(['u-a', 'u-b', 'u-c', 'u-d', 'u-e']);
+  });
+
+  it('is exactly reproducible within a bucket', () => {
+    // The positive control for rotation, and the reason this is not randomness. Without
+    // it, "the set changed" is satisfied by a result set that changes on every refresh —
+    // which is the behaviour being avoided, passing the test for the opposite reason.
+    expect(exploredAt(4)).toEqual(exploredAt(4));
+    // A full cycle of the 5-candidate pool at 2 slots per bucket returns to the start:
+    // offset 5*2 mod 5 === 0. Reproducibility is a property of the offset arithmetic, not
+    // of calling the same function twice with the same argument.
+    expect(exploredAt(5)).toEqual(exploredAt(0));
+  });
+
+  it('never rotates a well-measured candidate into an exploration slot', () => {
+    // Rotating over the whole pool would eventually label something we have measured
+    // properly as exploration. That is exploitation wearing an `explore` badge.
+    //
+    // `proven` cannot show this: it is the exploit pick, so `taken` removes it from the
+    // pool before rotation is reached, and the assertion holds whether or not the
+    // under-sampled filter exists. `measured` is the candidate that discriminates —
+    // well-observed, but ranked below the exploit cut and so still in the pool.
+    const ranked = [
+      candidate('proven', 500, 4),
+      candidate('measured', 300, 3),
+      candidate('u-a', 0, null),
+      candidate('u-b', 0, null),
+      candidate('u-c', 0, null),
+      candidate('u-d', 0, null),
+      candidate('u-e', 0, null),
+    ];
+    const everyBucket = [0, 1, 2, 3, 4, 5, 6].flatMap((rotation) =>
+      names(
+        withExploration({ ranked, scoreOf, rotation, count: 3, fraction: 0.5 }).filter(
+          (s) => s.kind === 'explore',
+        ),
+      ),
+    );
+
+    expect(everyBucket).not.toContain('measured');
+    // The positive control: the rotation did run and did move, so "never contains
+    // measured" is a fact about the filter rather than about an empty set.
+    expect(new Set(everyBucket).size).toBeGreaterThan(2);
+  });
+
+  it('still fills the reservation when nothing is under-sampled', () => {
+    // The fallback, and the acceptance criterion it protects. A brand that has measured
+    // everything well must still get an exploration slot; the least-known candidate is
+    // the honest pick even when it is not thin.
+    const ranked = [candidate('a', 500, 4), candidate('b', 400, 3), candidate('c', 300, 2)];
+    const selection = withExploration({ ranked, scoreOf, rotation: 3, count: 3, fraction: 0.2 });
+    expect(kinds(selection)).toContain('explore');
+  });
+
+  it('treats a negative bucket as a bucket, not a crash', () => {
+    expect(() =>
+      withExploration({ ranked: untried(), scoreOf, rotation: -3, count: 3, fraction: 0.5 }),
+    ).not.toThrow();
+    expect(exploredAt(-3)).toHaveLength(2);
+  });
+});
+
+describe('rotationBucket', () => {
+  it('is stable within a local week and moves across one', () => {
+    const mon = new Date('2026-03-02T12:00:00Z');
+    const sun = new Date('2026-03-08T12:00:00Z');
+    const next = new Date('2026-03-09T12:00:00Z');
+    expect(rotationBucket(sun, 'UTC')).toBe(rotationBucket(mon, 'UTC'));
+    expect(rotationBucket(next, 'UTC')).toBe(rotationBucket(mon, 'UTC') + 1);
+  });
+
+  it('rotates on the brand local Monday, not the UTC one', () => {
+    // 2026-03-09T02:00Z is already Monday in UTC but still Sunday evening in Denver, so
+    // the two zones disagree about which week this instant belongs to. A brand should not
+    // have its recommendations reshuffled partway through its own Sunday.
+    const instant = new Date('2026-03-09T02:00:00Z');
+    expect(rotationBucket(instant, 'UTC')).toBe(rotationBucket(instant, 'America/Denver') + 1);
   });
 });
