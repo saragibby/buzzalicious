@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { disconnectPrisma, getPrisma } from '../src/platform/db';
 import { getLogger } from '../src/platform/logger';
 import { seedAll } from './seed/index';
