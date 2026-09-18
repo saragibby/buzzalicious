@@ -7,6 +7,7 @@ import {
   type OutcomeGroup,
   type TargetOutcome,
 } from '../../lib/insights';
+import { WhatsWorking } from './WhatsWorking';
 
 /**
  * The insights screen.
@@ -252,6 +253,8 @@ export function Insights() {
           ))}
         </div>
       </header>
+
+      {brand ? <WhatsWorking brandId={brand.id} /> : null}
 
       <section className="insight-headline">
         {data.headline ? (

@@ -381,16 +381,21 @@ whose negative is also produced by the bug is not a test.
 *A correct guard downstream conceals an incorrect input upstream.* Hit three times now.
 
 The detection rule: **mutating an input is only meaningful in the window where the
-downstream filter is not already deciding the outcome.**
+downstream filter is not already deciding the outcome.** When a mutation survives, the
+reflex is to hunt for the missing assertion; the better first move is to ask what made the
+mutated value stop mattering.
 
-Worked example. A send-time search that starts from the wrong date is invisible, because
-`instant >= from` filters the bad candidates out anyway — *except* in the sliver where the
-local and UTC dates disagree. The fixture has to sit in that sliver (Denver at
-`2026-03-08T00:00:00Z`) or the mutation is silently absorbed.
+**Worked at length in [_A correct guard downstream conceals an incorrect input
+upstream_](#a-correct-guard-downstream-conceals-an-incorrect-input-upstream) below** — the
+DST send-time case, and why it is the `effectiveCaption` shape again. Two further instances
+not covered there:
 
-W8's instance: a fixture used the `proven` candidate to test the "well-measured candidate"
-guard — but `proven` is the *exploit* pick and is therefore already removed by `taken`
-before the guard is reached. The mutation survived, correctly.
+- W8's exploration fixture used the `proven` candidate to test the "well-measured
+  candidate" guard — but `proven` is the *exploit* pick, already removed by `taken` before
+  the guard is reached. The mutation survived, correctly.
+- The route tests: mounted under `/api/brands`, they pass with no guard in the router at
+  all, because `brand.routes.ts` answers 401 on the prefix first. Mounting the router bare
+  removes the neighbour; that is what makes the assertion about *this* router's guard.
 
 ### 3. Couldn't have failed (fixed point)
 
@@ -435,6 +440,34 @@ A guard that is tautologically silent passes every "it stayed silent" test. Asse
 W7's headline test asserts it *does* name a winner when scores are comparable. W8's
 exploration tests assert a genuine user choice *is* counted, alongside the assertion that
 an exploration post is not — otherwise the test would pass if everything were excluded.
+
+## A positional mock encodes the page's shape, not the test's claim
+
+W8 added a panel to the Insights route and broke a W7 test that had nothing to do with it.
+
+The test drove two responses with a `mockResolvedValueOnce` chain: summary, then timeline.
+That is a statement about *how many* requests the page makes and *in what order* — which
+is not what the test is about. The new panel issued a third request, the timeline's
+response went to the wrong caller, and the test failed with `Unable to find 1h`: a message
+about the metric table, pointing nowhere near the actual cause.
+
+Two things are worth separating here, because only one of them is the lesson.
+
+The panel also *crashed* the page, by reading `data.sendTime.suggested` on a payload that
+had only `archetypes`. That was a real defect and the fix is real: a panel that is additive
+to a working page must degrade itself rather than the page. It failed at *suggesting*
+something and took the numbers the user came for down with it.
+
+But the mock was independently wrong, and would have broken on any third request from any
+workstream. The rule:
+
+> Mock by **what was asked for**, not by **when it was asked**. A positional mock couples
+> every test to the current request count of the whole page, so unrelated work fails it
+> and the failure names the wrong thing.
+
+The tell is a failure message that describes a symptom in code the change never touched.
+Before debugging the symptom, check whether the fixture is order-coupled — otherwise you
+will go looking for a bug in the metric table that is not there.
 
 ## The failure that looks exactly like a pass
 
