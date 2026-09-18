@@ -33,8 +33,9 @@ testable on its own.
 | `template/` | Post templates and their slots | W4 |
 | `render/` | Satori → resvg → PNG rendering | W4 |
 | `publish/` | `PlatformAdapter` per network, credential resolution | W6 |
-| `trend/` | `TrendCollector` implementations, trend storage | W7 |
-| `insight/` | Metric collection and aggregation | W8 |
+| `trend/` | `TrendCollector` implementations, trend storage | W9 |
+| `link/` | Short links, click ingest and bot flagging, caption link injection | W7 |
+| `insight/` | Metric snapshots, outcome score, insights read model | W7 |
 | `recommend/` | Turning trends and insights into suggestions | W9 |
 | `ai/` | Provider-agnostic text and structured generation | W0 |
 

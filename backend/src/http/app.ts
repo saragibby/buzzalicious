@@ -21,6 +21,7 @@ import { createCredentialRouter } from './routes/credential.routes';
 import { createOAuthRouter } from './routes/oauth.routes';
 import { createPublishRouter } from './routes/publish.routes';
 import { createShortLinkRouter } from './routes/short-link.routes';
+import { createInsightRouter } from './routes/insight.routes';
 
 /**
  * Builds the Express application. Deliberately separate from `index.ts` so tests can
@@ -107,6 +108,10 @@ export function createApp(): Application {
   // a session.
   app.use('/api/workspaces/:workspaceId/credentials', createCredentialRouter());
   app.use('/api/brands/:brandId/publishing', createPublishRouter());
+
+  // W7. Insight reads are per brand for the same reason drafts are: the numbers belong to
+  // a brand, and the router resolves `:brandId` into a tenant-scoped client itself.
+  app.use('/api/brands/:brandId/insights', createInsightRouter());
   app.use('/oauth', createOAuthRouter());
 
   // W7. The public redirector. No session, no tenant — it is reached by strangers

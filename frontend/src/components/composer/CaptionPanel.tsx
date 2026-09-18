@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Platform } from '../../lib/brandApi';
-import { countLinks, measureCaption } from '../../lib/captionCount';
+import {
+  countLinks,
+  measureCaptionWithLink,
+  type LinkPreview,
+} from '../../lib/captionCount';
 import {
   LINK_MARKER,
   fetchPlatformSpecs,
@@ -58,7 +62,10 @@ export function CaptionPanel({
   const specsQuery = useQuery({ queryKey: platformSpecsQueryKey, queryFn: fetchPlatformSpecs });
   const [active, setActive] = useState<Platform | 'BASE'>('BASE');
 
-  const specs = specsQuery.data ?? [];
+  const specs = specsQuery.data?.platforms ?? [];
+  // Null until the specs land. `measureCaptionWithLink` degrades to a plain count rather
+  // than guessing a URL length.
+  const linkPreview = specsQuery.data?.linkPreview ?? null;
   const targets = draft.targets;
 
   const specFor = (platform: Platform): PlatformSpec | undefined =>
@@ -107,7 +114,9 @@ export function CaptionPanel({
         </button>
         {targets.map((target) => {
           const spec = specFor(target.platform);
-          const count = spec ? measureCaption(spec, captionFor(target.platform)) : null;
+          const count = spec
+            ? measureCaptionWithLink(spec, captionFor(target.platform), linkPreview)
+            : null;
           return (
             <button
               key={target.platform}
@@ -155,6 +164,7 @@ export function CaptionPanel({
           spec={specFor(active)}
           value={captionFor(active)}
           overridden={targets.find((t) => t.platform === active)?.caption !== null}
+          linkPreview={linkPreview}
           onChange={(value) => onOverrideChange(active, value)}
           onReset={() => onOverrideChange(active, null)}
         />
@@ -168,6 +178,7 @@ function PlatformCaption({
   spec,
   value,
   overridden,
+  linkPreview,
   onChange,
   onReset,
 }: {
@@ -175,6 +186,7 @@ function PlatformCaption({
   spec: PlatformSpec | undefined;
   value: string;
   overridden: boolean;
+  linkPreview: LinkPreview | null;
   onChange: (value: string) => void;
   onReset: () => void;
 }) {
@@ -187,7 +199,7 @@ function PlatformCaption({
     );
   }
 
-  const count = measureCaption(spec, value);
+  const count = measureCaptionWithLink(spec, value, linkPreview);
   const links = countLinks(value);
   const usesMarker = value.includes(LINK_MARKER);
 
