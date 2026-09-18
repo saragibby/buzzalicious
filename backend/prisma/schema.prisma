@@ -756,7 +756,9 @@ model LinkClick {
   // once we have real data. A bare `isBot` cannot deliver that: it records that something
   // matched, not what, so there is no way to select the clicks one layer alone caught and
   // ask whether it was too aggressive. Stable tokens, not prose — these get grouped by.
-  // `ua-crawler` | `head-request` | `non-html-accept` | `publish-proximity` | `duplicate`.
+  // `ua-crawler` | `ua-missing` | `head-request` | `non-html-accept` |
+  // `publish-proximity` | `duplicate`. The authoritative list is `BOT_REASON` in
+  // `modules/link/bot-filter.ts`; these are stored, so they are a data contract.
   // Null for a click no filter flagged.
   botReason   String?
 

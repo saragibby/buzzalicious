@@ -422,3 +422,36 @@ been permanently falsified and the phantom pattern would have gained a fifth ent
 One real gap surfaced: `ask_user` reports that *the user* answered and never says **who**.
 No session can source an attribution from inside itself. Until that changes, name a person
 only from evidence outside the session — and say which evidence.
+
+## A reformat silently invalidates every mutation harness
+
+Found by W7, and it is this file's own rule turned on the tooling that enforces it.
+
+Mutation harnesses work by string replacement: find a known line, replace it with a broken
+one, run the suite, expect red. But **a replace that matches nothing exits 0 and changes no
+bytes.** The suite then runs against unmodified source and passes — and a passing suite is
+exactly what a *caught* mutation looks like. NOMATCH and "the guard held" are the same
+observation unless the harness distinguishes them.
+
+Prettier is what turns this from theory into a live problem. `npm run format` rewraps lines,
+so a search string measured before the reformat no longer exists after it. Every mutation in
+the harness silently becomes a no-op, and the harness reports a perfect score. W7 hit this
+for real: its insight harness dropped 15 → 14 and only its NOMATCH detector made the
+difference visible.
+
+So:
+
+- **Every mutation must assert its target exists before replacing it.** `assert old in s,
+  "NOMATCH"` — loudly, as a failure, not a warning. A harness without this reports its own
+  breakage as success.
+- **Re-run harnesses after any reformat**, and after merging `main`. Mutation counts measured
+  before a format run are stale, not conservative.
+- **Verify the mutation actually changed the file** — compare bytes, not just exit code.
+
+A near-identical trap caught a reviewer here once: a mutation written as
+`where: { credentialId, credentialId: { not: null } }` had a duplicate JS object key, so the
+second silently won, the mutation was a no-op, and 21/21 green was recorded as a pass. Same
+shape, different mechanism — the edit didn't take, and nothing said so.
+
+Note also that CI runs `npm run format:check` as a step *separate* from `lint`. A branch can
+be lint-clean and still fail CI on formatting.
