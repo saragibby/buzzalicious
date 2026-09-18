@@ -10,6 +10,7 @@ import {
   templatesQueryKey,
   type RankedTemplate,
 } from '../../lib/composerApi';
+import { RecommendedStrip } from '../../components/composer/RecommendedStrip';
 
 /**
  * The template gallery — the first screen of the core loop.
@@ -141,6 +142,19 @@ export function TemplateGallery() {
             : 'There are no templates in the library yet.'}
         </p>
       ) : null}
+
+      {/* Above the grid, never instead of it. The grid below is not conditional on
+          anything this renders -- see the guardrail note in RecommendedStrip. */}
+      <RecommendedStrip
+        brandId={brand.id}
+        templates={templates}
+        pendingSlug={creating}
+        isPending={create.isPending}
+        onUse={(template) => {
+          setCreating(template.slug);
+          create.mutate(template);
+        }}
+      />
 
       <ul className="template-grid">
         {templates.map((template) => (

@@ -212,6 +212,88 @@ const baseSchema = z.object({
   OUTCOME_WEIGHT_SAVE: z.coerce.number().min(0).max(1).default(0.25),
   OUTCOME_WEIGHT_SHARE: z.coerce.number().min(0).max(1).default(0.2),
   OUTCOME_WEIGHT_ENGAGE: z.coerce.number().min(0).max(1).default(0.1),
+
+  /**
+   * The shrinkage constant `k` from docs/06, in units of posts.
+   *
+   * `score = (n·observed + k·prior) / (n + k)`, so `k` is literally "how many of the
+   * brand's own posts this prior is worth". At the default of 5, a brand's first post
+   * moves its score one sixth of the way from the category prior toward its own result,
+   * and by twenty posts the prior is noise.
+   *
+   * Config rather than a constant because the right value is an empirical question
+   * nobody can answer yet, and the brief requires it be tunable. `0` disables shrinkage
+   * entirely and returns the raw observed mean — which is a legitimate thing to want in
+   * a test, and a catastrophic thing to want in production, since it is precisely the
+   * "one lucky post" behaviour docs/06 exists to prevent.
+   */
+  SHRINKAGE_K: z.coerce.number().min(0).default(5),
+
+  /**
+   * Posts with an archetype (or in a send-time slot) before a **brand-specific** claim is
+   * allowed. Below it the UI shows category framing instead.
+   *
+   * This gates the sentence, not the score. The score is always available and always
+   * shrunk; what this decides is whether we are willing to say "your Before/After posts"
+   * rather than "Before/After posts work for businesses like yours". Saying the first on
+   * a sample of one is how a recommender loses a user's trust permanently.
+   */
+  RECOMMEND_MIN_SAMPLE_FOR_CLAIM: z.coerce.number().int().min(0).default(5),
+
+  /**
+   * Fraction of recommendation slots reserved for templates the brand has never used.
+   *
+   * Not a nicety. Pure exploitation converges on a local maximum and makes every feed
+   * look identical — the Predis.ai failure this product exists to beat (docs/06). A
+   * recommender that only ever surfaces what already worked cannot discover that
+   * something else works better, because it never generates the observation.
+   */
+  RECOMMEND_EXPLORATION_FRACTION: z.coerce.number().min(0).max(1).default(0.2),
+
+  /**
+   * How much better than typical an archetype must have performed before we will put a
+   * multiplier in front of the user.
+   *
+   * A sample large enough to pass `RECOMMEND_MIN_SAMPLE_FOR_CLAIM` can still be entirely
+   * unremarkable. "Your Before/After posts drove 1.0x your average" is a true sentence
+   * that reads as a finding and contains none, and "0.8x your average" recommends a
+   * template by reporting that it underperforms. Both are worse than the category framing
+   * we would otherwise have shown, so below this floor we show that instead.
+   *
+   * Gates the sentence only. The score, the ranking and the basis are untouched.
+   */
+  RECOMMEND_MIN_CLAIM_MULTIPLIER: z.coerce.number().min(1).default(1.2),
+
+  /**
+   * The same, for send-time slots, and deliberately higher.
+   *
+   * docs/06: a pure-exploitation scheduler posts at the first slot that looked good and
+   * then never learns anything again, because it generates no observations anywhere else.
+   * The first lucky slot becomes permanent. Timing has no equivalent of the template
+   * gallery's browse-anything escape hatch, so the exploration rate has to carry more of
+   * the load.
+   */
+  RECOMMEND_SENDTIME_EXPLORATION_FRACTION: z.coerce.number().min(0).max(1).default(0.25),
+
+  /**
+   * Measurements a `(brand, platform, component)` needs before its median is used to
+   * normalise against.
+   *
+   * A median of one observation is that observation, so normalising by it returns 1.0 for
+   * every post and destroys the signal completely — silently, and in a way that looks
+   * like "this brand is perfectly consistent". Below this threshold the normaliser falls
+   * back through a declared stack rather than substituting anything quietly; see
+   * `NormalizationSource` in `modules/recommend/normalize.ts`.
+   */
+  RECOMMEND_MIN_SAMPLE_FOR_MEDIAN: z.coerce.number().int().min(1).default(3),
+
+  /**
+   * Weeks of history the cadence recommendation looks back over.
+   *
+   * Cadence is scored on **total** weekly outcome, never per-post average (docs/06), so
+   * this window is a count of comparable weeks rather than of posts.
+   */
+  RECOMMEND_CADENCE_WEEKS: z.coerce.number().int().min(2).default(8),
 });
 
 /**
@@ -399,6 +481,24 @@ const schema = baseSchema
         share: env.OUTCOME_WEIGHT_SHARE,
         engage: env.OUTCOME_WEIGHT_ENGAGE,
       },
+    },
+
+    /**
+     * The feedback loop's tunables (W8, docs/06).
+     *
+     * Every one of these is a belief about data nobody has enough of yet. They live here
+     * rather than as constants so that tuning them is a config change, and so that a test
+     * can drive the behaviour to its edges — `k = 0` and `k = 50` are both meaningful
+     * probes of whether shrinkage is wired in at all.
+     */
+    recommend: {
+      shrinkageK: env.SHRINKAGE_K,
+      minSampleForClaim: env.RECOMMEND_MIN_SAMPLE_FOR_CLAIM,
+      explorationFraction: env.RECOMMEND_EXPLORATION_FRACTION,
+      minClaimMultiplier: env.RECOMMEND_MIN_CLAIM_MULTIPLIER,
+      sendTimeExplorationFraction: env.RECOMMEND_SENDTIME_EXPLORATION_FRACTION,
+      minSampleForMedian: env.RECOMMEND_MIN_SAMPLE_FOR_MEDIAN,
+      cadenceWeeks: env.RECOMMEND_CADENCE_WEEKS,
     },
   }));
 

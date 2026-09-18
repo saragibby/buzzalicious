@@ -140,35 +140,43 @@ describe('Insights', () => {
 
   describe('the metric timeline', () => {
     it('dashes the metrics this platform never reported', async () => {
-      // Two responses: the summary, then the timeline fetched when the row is expanded.
-      vi.mocked(fetch)
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify(summary()), {
+      // Routed by URL, not by call order. A positional `mockResolvedValueOnce` chain
+      // encodes *how many* requests the page makes and in what sequence, so it breaks
+      // the moment any panel on the page gains a fetch — which is what happened when
+      // the recommendations panel landed: the timeline's response was handed to the
+      // wrong caller and this test failed for a reason unrelated to what it asserts.
+      const timeline = {
+        points: [
+          {
+            capturedAt: '2026-03-01T13:00:00.000Z',
+            hoursSincePublish: 1,
+            linkClicks: 4,
+            impressions: null,
+            reach: null,
+            likes: 0,
+            comments: null,
+            shares: null,
+            saves: null,
+            videoViews: null,
+          },
+        ],
+      };
+
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        const payload = url.includes('/timeline')
+          ? timeline
+          : url.includes('/recommendations')
+            ? { archetypes: [], sendTime: { suggested: null }, cadence: { suggested: null } }
+            : summary();
+
+        return Promise.resolve(
+          new Response(JSON.stringify(payload), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
-        )
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              points: [
-                {
-                  capturedAt: '2026-03-01T13:00:00.000Z',
-                  hoursSincePublish: 1,
-                  linkClicks: 4,
-                  impressions: null,
-                  reach: null,
-                  likes: 0,
-                  comments: null,
-                  shares: null,
-                  saves: null,
-                  videoViews: null,
-                },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
         );
+      });
 
       renderInsights();
       await screen.findByText('Shoulder season deals');

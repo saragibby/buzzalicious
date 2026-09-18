@@ -101,17 +101,31 @@ columns and a UI that hides unavailable metrics rather than showing zeros.
 ## Outcome scoring
 
 Raw metrics aren't comparable across platforms — an Instagram like and an X like are not
-the same event. Normalize into a single per-post **outcome score**:
+the same event. Normalize into a single per-post **outcome score**.
+
+**As built (W8), this deviates from the formula below in two ways.** Both were forced by
+production data; the reasoning is recorded here because the naive version is the one a
+future reader will reach for first.
+
+### The denominator is `impressions`, not `reach`
+
+The Threads adapter (`threads.adapter.ts`) and the X adapter (`x.adapter.ts`) both
+hard-code `reach: null` — neither API returns it. Dividing by `reach` would therefore null
+**all four components for every X and Threads post**, and a nulled component is
+indistinguishable downstream from a measured zero. The loop would have concluded that X
+does not work, confidently, from an absence of data rather than a presence of failure.
+
+`impressions` is available on all four platforms and answers the same question.
+
+### Components are imputed, not coverage-divided
 
 ```
-outcomeScore = w_click  * normalize(linkClicks / reach)
-             + w_save   * normalize(saves / reach)
-             + w_share  * normalize(shares / reach)
-             + w_engage * normalize((likes + comments) / reach)
+rate(component)  = component / impressions
+value(component) = rate / median(rate) over (brand, platform, component)
+score            = Σ w_i · (value_i if measured else 1.0)
 ```
 
-Starting weights, expressing the product thesis that clicks and saves indicate intent
-while likes indicate scrolling:
+`1.0` means "typical for this brand on this platform". The weights are unchanged:
 
 | Signal | Weight |
 |--------|--------|
@@ -120,12 +134,49 @@ while likes indicate scrolling:
 | Shares | 0.20 |
 | Likes + comments | 0.10 |
 
-Weights live in config, not code, so they can be tuned as real data arrives. Normalize
-**per platform** against that brand's own rolling median, so a brand with 200 followers
-and one with 20,000 are scored on their own baseline.
+Weights and `k` live in config, not code.
 
-When `reach` is unavailable, fall back to per-brand rolling-median normalization of raw
-counts.
+The alternative — dividing by achieved coverage — makes a post measured on one component
+score that component raw, so `1 click` and `1 like` both come out at `1`. Imputing the
+neutral value instead keeps every post on one scale at the cost of pulling thin posts
+toward typical, which is the direction we want a thin measurement to move.
+
+**A fully unmeasured post scores `null`, never `1.0`.** This is the one place the
+imputation stops, and it is enforced by a test rather than a convention: "nothing measured"
+and "measured, and it was average" must not converge on the same output.
+
+### Coverage bias: known bias, floor in place, correction deferred
+
+Those are the words to use. Not "damped" — the caveat gets compressed on each retelling
+until "we have exploration" stands in for "we handled it", and it is not handled.
+
+**The same root cause has now surfaced three times.** They are documented together so the
+next reader sees one pattern rather than three unrelated caveats:
+
+1. **Ranking variance.** A component that is imputed contributes exactly `1.0`, with zero
+   variance. So a low-coverage archetype has a compressed score range and a high-coverage
+   one has a wide range. Over-representation at the extremes is by *range*, not by mean.
+2. **The imputation residual.** Imputing the neutral value is unfalsifiable by
+   construction: no observation can ever contradict it, because the absence of the
+   observation is the trigger.
+3. **The claim bar moves with coverage.** With clicks only, `observed = 0.45x + 0.55`, so
+   clearing a `1.2` floor needs a true lift of **~1.44×**; at full coverage it needs
+   `1.2×`. The materiality gate is therefore stricter on exactly the posts we know least
+   about. Measured, not theorised: an X post at 1.6× lift clears it (1.27) and at 1.4×
+   does not (1.18), while an Instagram post at 1.4× clears it (1.40). This is a
+   characterisation test, not an aspiration.
+
+The floor in place is `RECOMMEND_MIN_SAMPLE_FOR_CLAIM`, which stops the thinnest cases
+from earning a sentence at all.
+
+**The candidate correction, recorded so a future author does not invent a worse one:**
+rank archetypes *within* each platform and combine the ranks (Borda / average rank) rather
+than combining scores. Ranks are invariant under monotone rescaling, so a compressed range
+and a wide one contribute equally. Two caveats must travel with it: (1) coverage is not
+perfectly platform-determined — a failed poll varies it per post — so within-platform
+commensurability is *much closer*, not exact; (2) rank combination discards magnitude,
+which matters when one archetype is enormously better rather than merely better. **Not for
+v1.**
 
 ## Feedback loop v0
 
@@ -148,7 +199,61 @@ score(b, a) = ( n(b,a) · observed(b,a) + k · prior(category(b), a) ) / ( n(b,a
 - `observed(b,a)` — mean outcome score for those posts
 - `prior(c,a)` — archetype performance across all brands in category *c*, falling back to
   the hand-seeded `BusinessCategory.priors` when aggregate data is thin
-- `k` — smoothing constant, start at **5**
+- `k` — smoothing constant, start at **5** (config, not a constant)
+
+**The seeded priors are rescaled.** `BusinessCategory.priors` is authored as weights in
+`0..1`, but shrinkage consumes values on the normalised scale where `1.0` is typical. Feeding
+`0..1` weights in directly would make every seeded prior *below* typical, so a cold-start
+brand would be told its whole category underperforms. The seeds are therefore rescaled to
+mean `1.0` before entering shrinkage. This depends on the `minSampleForClaim` gate to stay
+honest: a rescaled seed is a shape, not a measurement, and must never earn a brand claim.
+
+### Shrinkage must not launder a `null` into a number
+
+This is the load-bearing constraint of W8, and it is enforced by the *type*, not by a
+comment or a naming convention.
+
+Shrinkage's entire job is replacing a thin measurement with a better estimate, which makes
+it the one operation where "unmeasured" and "measured, then pulled hard toward the prior"
+naturally converge on the same output. A group with a single thin observation shrunk 95%
+toward the prior is an ordinary non-null number that passes every value assertion. It does
+not misstate the value — it misstates the value's **provenance**.
+
+So:
+
+- `meanScore` and `scored` are unchanged — raw, unshrunk, meaning what they say.
+- `shrink()` returns a branded `ShrunkScore` that is **structurally unassignable to
+  `number`**, carrying `shrunkValue`, and a `basis` of `{ observed, observations, prior,
+  priorSource, k }`. A caller cannot use a shrunk figure where a measured one is expected
+  without saying so.
+- Claims report `claimBasis`, and that field is **structural**: a lookup table keyed by the
+  label supplies the number, so the label *is* the selector and the two cannot drift.
+
+The precedent is exact and local. `effectiveCaption` exists as a named function rather than
+an inline `??` precisely because the two look interchangeable and are not — and the bug it
+predicted was committed twelve lines away, in `buildPublishInput`, which used
+`target.caption ?? ''` and published an empty caption for every target without an override.
+The caption *gate* used `effectiveCaption` correctly and approved the inherited copy; the
+path that was right concealed the path that was wrong. A convention documented at the
+definition site does not survive contact with a call site. A type does.
+
+The same reasoning applies to `claimBasis`, which was originally a string literal written
+beside the comparison it described. Relabelling it passed all 127 tests. A provenance field
+that can be wrong about its own subject is worse than no field, because downstream believes
+it.
+
+### Why the materiality floor gates the raw value
+
+`RECOMMEND_MIN_CLAIM_MULTIPLIER` compares the **raw** observed multiplier, not the shrunk
+one, and the payload records that as `claimBasis: 'raw-observed'`.
+
+Shrinkage pulls thin samples toward `1.0` *by design*. A `1.2` floor on the shrunk value
+would therefore be a second sample-size gate wearing a materiality label: a brand with
+`n = 12` and a genuine `1.3×` would lose its sentence to its thinness at the same moment
+`minSampleForClaim` declared the sample ample. Two gates, two questions:
+
+- `minSampleForClaim` — *did we see enough?*
+- `minClaimMultiplier` — *was what we saw worth saying?*
 
 The behavior this produces is exactly what the PRD describes:
 
@@ -169,6 +274,17 @@ Ranking silently is a missed opportunity. Show the reasoning:
 > **Recommended for you** — *Before/After* posts drove **2.4× more link clicks** than your
 > average over your last 12 posts.
 
+**Deviation, shipped:** v1 copy says "**2.4× your average outcome**", not "2.4× more link
+clicks". The multiplier is blended across up to four components, so naming a single
+component would be false whenever the components disagree — and disagreeing components are
+the normal case, not the edge case.
+
+A component-specific multiplier is a real product improvement and was **considered and
+priced**, not overlooked. The cost is a per-component normaliser: to say "2.4× more link
+clicks" honestly, clicks must be normalised on their own, which is a second normaliser to
+build, store and keep consistent with the blended one. Worth doing when the copy is shown
+to be the thing limiting trust; not worth doing before that.
+
 And for a cold-start brand:
 
 > **Popular with coffee shops** — *Behind the Scenes* templates perform well for
@@ -187,6 +303,36 @@ mode: when the explanation looks wrong to the user, we find out early.
   identical — the exact Predis.ai failure the product exists to beat.
 - **Require a minimum sample** before showing a brand-specific claim. Under 5 posts with
   an archetype, show the category framing instead.
+
+### Feedback contamination is the defining risk
+
+If the loop counts its own suggestions as evidence of what the brand wants, it converges on
+whatever it happened to suggest first — and the convergence looks exactly like learning.
+Every scheduled post therefore carries a `scheduleSource` of `EXPLORATION`, `SUGGESTED` or
+a genuine user choice.
+
+**The rule is dimension-specific, and the obvious reading is backwards:**
+
+| Signal | The question it answers | Does an exploration post count? |
+|--------|-------------------------|---------------------------------|
+| **Outcome** | Did this perform well? | **Yes** — that is the whole return on exploring |
+| **Preference** | Did this brand *want* this? | **No** — we picked it, not them |
+
+Excluding exploration from *outcome* would throw away the only data exploration exists to
+produce. Including it in *preference* would let the system read its own suggestion back as
+a user endorsement.
+
+`SUGGESTED` is excluded from preference too: **accepting a default is not choosing.** It is
+weaker evidence than an unprompted pick and stronger than nothing, and v1 does not try to
+price that difference — it declines to count it.
+
+Choices are counted **per post, not per target.** A post cross-published to four platforms
+is one decision, and counting it four times would let cross-posting behaviour masquerade as
+preference strength.
+
+The test for this needs its positive control or it is vacuous: assert that an exploration
+post is *excluded*, **and** that a genuine user choice *is* counted. Without the second
+assertion the test passes when everything is excluded.
 
 ## Send-time and cadence learning
 
@@ -268,6 +414,28 @@ with high uncertainty rather than uniformly random ones. Surface this honestly: 
 Thursday evening — we haven't tested that time for you yet."* Users tolerate
 experimentation they were told about.
 
+**Exploration starves without rotation, and the starvation is invisible.**
+
+Uncertainty is `1 - brandWeight`, and `brandWeight = n / (n + k)` where `n` counts posts
+the brand actually *made*. It never moves when a candidate is merely *shown*. So the most
+uncertain candidate is offered, declined, and arrives at the next refresh in precisely the
+state that got it offered — holding the exploration slot forever while the rest of the
+under-sampled pool is never seen. Every individual recommendation looks correct.
+
+The fix is to rotate the selection window over a caller-supplied coarse time bucket:
+
+- **`rotation` is a required parameter, never defaulted.** A default of `0` reintroduces
+  the bug silently at every call site that forgets it, which is the same class of mistake
+  as the `?? ''` caption default.
+- **Rotation moves only over the under-sampled candidates** (`observations <
+  minSampleForClaim`), falling back to the whole pool when none are — otherwise the "an
+  exploration slot appears in every result set" guarantee fails for a mature brand.
+- **The offset steps by whole windows**, so consecutive buckets are disjoint and every
+  candidate is reached within `ceil(n / slots)` buckets.
+
+The bucket is the local week, computed with the same `localWeekStart` the cadence code
+uses, rather than a second independent notion of "week".
+
 ### Cadence is a separate problem
 
 Frequency doesn't have an optimum in the way timing does — it has **diminishing returns
@@ -278,6 +446,29 @@ being spread thinner while total reach still grows.
 So measure cadence against **total** outcome per week, not per-post average. Optimizing
 per-post average pushes toward posting almost never, which scores beautifully and grows
 nothing.
+
+**This has a consequence for shrinkage that is easy to get wrong.** Scoring totals means
+the prior for a band of *n* posts per week must be `n × perPost.prior`, **not `1.0`**. A
+neutral prior on a *total* says "a typical week is worth one typical post", which drags
+every high-frequency band downward — the system would recommend posting less by way of a
+prior, while looking exactly like shrinkage working correctly. Assert it directly: a brand
+posting once with a great result must not outrank a brand posting eight times well.
+
+Two further details the tests pin down:
+
+- **Adjacency is consecutive integer frequencies**, not consecutive entries in the observed
+  band list. If a brand has tried 1, 2 and 8 posts a week, 2 and 8 are not neighbours, and
+  a suggested range must not step over the untried frequencies between them.
+- **The plateau window is additive, not proportional.** A neighbouring band is included
+  when `total >= bestEfficiency × n - slack`, with slack of one typical post. A
+  *proportional* window can never contain a smaller band, which would silently make the
+  range one-sided.
+- **A cross-posted post counts once.** Its targets are averaged, then posts are summed.
+- **An unmeasured week is `null`, never `0`.** A week we could not measure is not a week
+  that performed terribly.
+
+Weeks start Monday from the **local** date, computed with date-only UTC arithmetic — which
+has no DST, because dates do not have offsets.
 
 Cadence recommendations should be conservative and advisory in v1 — suggest a range, never
 auto-schedule into it. Getting cadence wrong is visible to a brand's real audience in a way

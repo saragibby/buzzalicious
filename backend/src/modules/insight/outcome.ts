@@ -71,8 +71,13 @@ export type OutcomeComponent = 'click' | 'save' | 'share' | 'engage';
  * and neither is worth its own weight. It counts as measured when *either* is present:
  * requiring both would discard the component on every platform that exposes one, which
  * is most of them at the smaller account tiers this product serves.
+ *
+ * Exported for W8's normaliser, which has to fold raw metrics into the *same* four
+ * components before taking medians over them. A second copy of the likes-plus-comments
+ * rule would be a second place for it to drift, and the drift would be silent — two
+ * slightly different definitions of `engage` produce two plausible numbers.
  */
-function componentValues(inputs: OutcomeInputs): Record<OutcomeComponent, number | null> {
+export function componentValues(inputs: OutcomeInputs): Record<OutcomeComponent, number | null> {
   const engagement = [inputs.likes, inputs.comments].filter(
     (value): value is number => value !== null && value !== undefined,
   );
@@ -85,8 +90,15 @@ function componentValues(inputs: OutcomeInputs): Record<OutcomeComponent, number
   };
 }
 
-/** Weight order, most meaningful first. */
-const COMPONENTS: OutcomeComponent[] = ['click', 'save', 'share', 'engage'];
+/**
+ * Weight order, most meaningful first.
+ *
+ * `readonly` because the order is semantic and this is exported. While it was
+ * module-private the file boundary enforced that invariant; reachable, any consumer could
+ * `.sort()` or `.push()` and reorder weight semantics process-wide from a module with no
+ * idea it was load-bearing. `const` stops reassignment, not mutation.
+ */
+export const COMPONENTS: readonly OutcomeComponent[] = ['click', 'save', 'share', 'engage'];
 
 export function outcomeScore(inputs: OutcomeInputs): OutcomeScore {
   const weights = getConfig().outcome.weights;

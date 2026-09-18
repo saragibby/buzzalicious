@@ -4,6 +4,7 @@ import { disconnectPrisma, getPrisma, type Db } from '../../src/platform/db';
 import { withTenantScope } from '../../src/platform/tenancy';
 import {
   clicksByDay,
+  clicksByLocalHour,
   clicksByShortLink,
   rollUpByPlatform,
   rollUpByPost,
@@ -432,6 +433,123 @@ describe.skipIf(!hasTestDatabase)('click rollups', () => {
       // above means "filtered out" and not "this function returns nothing".
       const wide = await clicksByDay(scoped(mine), WINDOW, 'UTC');
       expect(wide.length).toBeGreaterThan(0);
+    });
+  });
+
+  /**
+   * Two brands in ONE workspace.
+   *
+   * Every other fixture in this file is one brand per workspace, which is also what both
+   * real clients run today — and under that shape a brand-scoped query and a merged
+   * workspace-wide one return byte-identical results. So this is the only fixture that can
+   * tell the two implementations apart, and without it the contaminated version would stay
+   * correct-looking indefinitely and surface as send-time advice that is merely mediocre.
+   *
+   * The clicks are at **disjoint hours** on purpose. Equal counts at overlapping hours
+   * would still pass a count assertion under a merge.
+   *
+   * Queried through a *workspace* scope deliberately. `TENANT_MODELS.linkClick.brand`
+   * already filters `{ shortLink: { brandId } }`, so a brand-scoped caller is safe without
+   * the function doing anything — which means a brand-scoped test proves nothing about
+   * this function. The workspace scope is the window where the implementations disagree.
+   */
+  describe('two brands in one workspace', () => {
+    const HOURS_WINDOW = { from: new Date('2024-01-01'), to: new Date('2024-01-31') };
+    let workspaceId: string;
+    let brandA: string;
+    let brandB: string;
+
+    async function makeBrand(name: string, at: string): Promise<string> {
+      const brandId = randomUUID();
+      await db.brand.create({
+        data: {
+          id: brandId,
+          workspaceId,
+          name,
+          slug: `tb-${brandId.slice(0, 8)}`,
+          palette: {},
+          typography: {},
+          voiceGuide: {},
+        },
+      });
+
+      const link = await db.shortLink.create({
+        data: {
+          slug: `tl-${brandId.slice(0, 8)}`,
+          brandId,
+          destinationUrl: 'https://example.com',
+        },
+      });
+      await db.linkClick.create({
+        data: { shortLinkId: link.id, isBot: false, occurredAt: new Date(at) },
+      });
+
+      return brandId;
+    }
+
+    beforeAll(async () => {
+      workspaceId = randomUUID();
+      await db.workspace.create({
+        data: { id: workspaceId, slug: `tw-${workspaceId.slice(0, 8)}`, name: 'two brands' },
+      });
+      workspaceIds.push(workspaceId);
+
+      // Tuesday 2 January 2024. 15:00Z and 03:00Z — twelve hours apart, so a merged
+      // histogram has two populated hours and neither brand's alone does.
+      brandA = await makeBrand('brand a', '2024-01-02T15:00:00Z');
+      brandB = await makeBrand('brand b', '2024-01-02T03:00:00Z');
+    });
+
+    function workspaceScope() {
+      return withTenantScope(db, { kind: 'workspace', workspaceId });
+    }
+
+    it('gives each brand only its own clicking hours', async () => {
+      const a = await clicksByLocalHour(workspaceScope(), brandA, HOURS_WINDOW, 'UTC');
+      const b = await clicksByLocalHour(workspaceScope(), brandB, HOURS_WINDOW, 'UTC');
+
+      expect(a.map((h) => h.hour)).toEqual([15]);
+      expect(b.map((h) => h.hour)).toEqual([3]);
+    });
+
+    it('does not let one brand see the other\u2019s peak hour', async () => {
+      const a = await clicksByLocalHour(workspaceScope(), brandA, HOURS_WINDOW, 'UTC');
+
+      // POSITIVE CONTROL first: brand A's own hour IS present, so the absence below is
+      // filtering and not an empty result. Without it this passes on a query that returns
+      // nothing at all — which is the single most common way a scope test lies.
+      expect(a.find((h) => h.hour === 15)?.clicks).toBe(1);
+      expect(a.find((h) => h.hour === 3)).toBeUndefined();
+
+      // And brand B's click really does exist in this workspace and window, so this is a
+      // separation test rather than a test that the row was never written.
+      const b = await clicksByLocalHour(workspaceScope(), brandB, HOURS_WINDOW, 'UTC');
+      expect(b.find((h) => h.hour === 3)?.clicks).toBe(1);
+    });
+
+    it('buckets each brand in the zone it was asked for', async () => {
+      // The other half of the incoherence: a merged histogram is bucketed in whichever
+      // brand's zone was passed, so at least one brand reads in the wrong zone. Here the
+      // same brand's single click moves hour with the zone, and does not acquire the
+      // other brand's.
+      const denver = await clicksByLocalHour(
+        workspaceScope(),
+        brandA,
+        HOURS_WINDOW,
+        'America/Denver',
+      );
+
+      // 15:00Z on 2 January is 08:00 MST.
+      expect(denver.map((h) => h.hour)).toEqual([8]);
+      expect(denver.every((h) => h.dayOfWeek === 2)).toBe(true);
+    });
+
+    it('still excludes another workspace entirely', async () => {
+      // The workspace boundary was never the thing at risk, but a brand filter that
+      // replaced the tenancy filter rather than AND-ing with it would break it.
+      const foreign = await clicksByLocalHour(workspaceScope(), mine.brandId, HOURS_WINDOW, 'UTC');
+
+      expect(foreign).toEqual([]);
     });
   });
 });
