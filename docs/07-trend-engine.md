@@ -212,3 +212,51 @@ Manual curation, RSS, and Google Trends collectors need no platform credentials 
 
 Steps 1–6 have **no external API dependency**. This is what keeps the trend engine off the
 approval critical path entirely.
+
+## v0 implementation notes (W9, steps 1–6)
+
+Steps 1–6 are implemented in `backend/src/modules/trend/`. Step 7 was not started: it needs
+external API access that is not confirmed to exist, and [Q6](./09-open-questions.md)
+(TikTok ToS) is unresolved. No part of the module references TikTok.
+
+Where the build departed from the plan above, and why:
+
+- **Curated angles and mapping metadata are namespaced under `Trend.raw`.** The schema has
+  no column for a suggested angle, and `TrendCategoryScore` has no confidence, method or
+  review-status columns. `schema.prisma` is W2-owned, so v0 stores both under
+  `Trend.raw.curation` and `Trend.raw.categoryMapping`, with every read and write going
+  through `trend.schemas.ts`. A `Trend.curation Json?` column and mapping metadata columns
+  are requested of W2; migrating then touches one file.
+
+  Because two concerns share one JSON column, all writes go through a transactional
+  read-modify-write (`trend.repository.ts#mergeRaw`). Writing `raw` from a stale in-memory
+  `Trend` silently discards the other concern's data — this was a real bug, caught by a
+  database-backed test.
+
+- **Saturation is normalised between a floor and a ceiling**, not against a fixed
+  logarithm. A naive `log10(volume + 1) / log10(1e6)` term drove momentum negative and
+  clamped emerging *and* saturated trends alike to zero, destroying exactly the ordering
+  the saturation penalty exists to create.
+
+- **A feed entry with no suggested angle is dropped, not shown without one.** The
+  acceptance criterion is enforced structurally rather than by convention, so the feed
+  cannot regress into a ranked list of hashtags.
+
+- **"Why this fits you" is assembled deterministically** from stored mapping evidence, the
+  category name and lifecycle status. There is no LLM call on the request path.
+
+- **Low-confidence mappings are withheld from feeds** until reviewed, and `CONFIRMED` /
+  `REJECTED` review states are never overwritten by a re-map.
+
+- **Rescoring has no schedule.** pg-boss is deferred to W6, so recompute is triggered from
+  the curation UI. It should move to a cron when the job system lands.
+
+- **`TrendSignal.metrics` is a contract column, not a verbatim payload.** `schema.prisma`
+  points it at `TrendSignalMetricsSchema`, which names `volume` and `engagement`, and the
+  seed now writes those names. Provenance is preserved by `Trend.raw`, which is the column
+  this document's "the raw payload must survive" requirement is about.
+
+  A collector arriving with its own vocabulary therefore **normalises at the collector
+  boundary** on the way into `metrics`, keeping its verbatim payload in `raw`. Readers know
+  one name. `volumeOf()` / `engagementOf()` return `null` — never `0` — when a metric is
+  absent, so a metric that was never observed cannot be mistaken for a flat trend.

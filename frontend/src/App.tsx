@@ -5,6 +5,8 @@ import { RequireAuth } from './components/RequireAuth';
 import { ScopeProvider } from './lib/ScopeProvider';
 import { BrandKit } from './routes/BrandKit';
 import { Login } from './routes/Login';
+import { TrendFeed } from './routes/trends/TrendFeed';
+import { TrendCurate } from './routes/trends/TrendCurate';
 import { Calendar, Composer, Dashboard, Insights, NotFound, Settings } from './routes/Placeholder';
 
 /**
@@ -44,6 +46,9 @@ export function App() {
             }
           >
             <Route index element={<Dashboard />} />
+            {/* W9 */}
+            <Route path="trends" element={<TrendFeed />} />
+            <Route path="trends/curate" element={<TrendCurate />} />
             <Route path="composer" element={<Composer />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="insights" element={<Insights />} />

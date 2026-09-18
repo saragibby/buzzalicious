@@ -11,6 +11,8 @@ import { createAuthRouter } from './routes/auth.routes';
 import { createBrandRouter, multerErrorHandler } from './routes/brand.routes';
 import { createHealthRouter } from './routes/health.routes';
 import { createFilesRouter, shouldMountFilesRouter } from './routes/files.routes';
+import { createTrendRouter } from './routes/trend.routes';
+import { createTrendAdminRouter } from './routes/trend-admin.routes';
 import { createWorkspaceRouter } from './routes/workspace.routes';
 
 /**
@@ -77,6 +79,11 @@ export function createApp(): Application {
   app.use('/auth', createAuthRouter(passport));
   app.use('/api/workspaces', createWorkspaceRouter());
   app.use('/api/brands', createBrandRouter());
+
+  // W9. The feed is per-brand and read-only; curation writes platform-global rows and is
+  // gated separately by TREND_ADMIN_EMAILS inside its own router.
+  app.use('/api/trends', createTrendRouter());
+  app.use('/api/admin/trends', createTrendAdminRouter());
 
   if (shouldMountFilesRouter()) {
     app.use('/api/files', createFilesRouter());
