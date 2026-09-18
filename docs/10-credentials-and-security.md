@@ -347,3 +347,41 @@ change, against a store whose format is already versioned — which it now is.
 **Rotation runbook and health sweeps.** `refresh()` and `validate()` are on the adapter
 contract and are exercised in tests; the periodic job that calls them across every stored
 account, and the runbook for a compromised app secret, are W6 PR 2.
+
+## Implemented in W6 PR 2
+
+**The health sweep exists and is cross-tenant by design.** `account.health` runs hourly and
+is the only thing in the system that reads `SocialAccount` rows across every workspace. That
+capability is deliberately narrow: `SystemAccountReader` returns identifiers, status and
+timestamps — never a token, never a caption, never anything a leak would make interesting —
+and the sweep **re-scopes to the owning brand before it writes**. Preserve both halves if you
+change it; a cross-tenant read that also wrote cross-tenant would be the worst bug this
+codebase could ship.
+
+**Revocation is a fan-out, not a delete.** `revokeCredential` marks the credential, then its
+`SocialAccount` rows, then queued `PostTarget` rows as `BLOCKED` rather than `FAILED`. The
+distinction is load-bearing: `BLOCKED` does not consume a retry and does not present the
+user with errors about posts that were never attempted. The rows are kept because the
+history of what was published through which credential is what an incident review needs, and
+deleting the credential would take the accounts with it by cascade.
+
+**No API path returns a token, because no query fetches one.** `connection.service.ts` uses
+an explicit `select` with the token columns absent. This is stronger than deleting fields
+before serializing: the Prisma extension decrypts on read, so a `findMany` without a `select`
+would put live plaintext in memory one line away from `res.json`. There is a test that
+asserts on the serialized body rather than on the object, because the body is what would
+actually go on the wire.
+
+**Runbooks now exist** — [`docs/runbooks/`](./runbooks/) covers rotation, revocation,
+offboarding and account health. The rotation runbook records the non-obvious part: rotating
+an app secret does **not** break existing access tokens, only refresh, so publishing keeps
+working and the account dies up to sixty days later. Never conclude a rotation worked because
+posting still works.
+
+### Still deferred after PR 2
+
+- Per-workspace DEKs wrapped by a KEK (unchanged from PR 1; the format is versioned and the
+  seam exists).
+- Access log retention period — still an open item, and the offboarding runbook says so
+  rather than inventing a number.
+- Platform-side token revocation during offboarding is a manual, best-effort step.

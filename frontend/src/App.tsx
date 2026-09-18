@@ -11,6 +11,7 @@ import { UsageAdmin } from './routes/admin/UsageAdmin';
 import { Calendar, Dashboard, Insights, NotFound, Settings } from './routes/Placeholder';
 import { TemplateGallery } from './routes/composer/TemplateGallery';
 import { Composer } from './routes/composer/Composer';
+import { Connections } from './routes/settings/Connections';
 
 /**
  * The routing shell.
@@ -65,6 +66,10 @@ export function App() {
                 — which a single /composer screen holding its state in memory is not. */}
             <Route path="composer" element={<TemplateGallery />} />
             <Route path="composer/:postId" element={<Composer />} />
+            {/* W6. Appended at the end of the route block rather than beside `settings`:
+                this file conflicts in every parallel workstream, and an append resolves
+                trivially where an insert does not. */}
+            <Route path="settings/connections" element={<Connections />} />
           </Route>
           <Route path="/404" element={<NotFound />} />
           <Route path="*" element={<Navigate to="/404" replace />} />

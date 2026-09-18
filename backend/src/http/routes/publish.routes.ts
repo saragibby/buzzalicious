@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/require-auth';
 import { requireBrand, brandOf } from '../middleware/require-scope';
 import { cancelTargets, scheduleTargets } from '../../modules/publish/schedule.service';
 import { publishTarget } from '../../modules/publish/publish.service';
+import { listConnections } from '../../modules/publish/connection.service';
 import { enqueuePublish } from '../../jobs';
 import { handle } from './trend.routes';
 
@@ -126,6 +127,17 @@ export function createPublishRouter(): Router {
       });
 
       res.json({ outcome });
+    }),
+  );
+
+  // Appended at the end of the route block: W5 is editing this file's neighbours in
+  // parallel, and appending rather than inserting keeps the merge conflict trivial.
+  router.get(
+    '/accounts',
+    requireBrand('brandId', { minimumRole: 'MEMBER' }),
+    handle(async (req, res) => {
+      const { db } = brandOf(req);
+      res.json({ accounts: await listConnections(db) });
     }),
   );
 

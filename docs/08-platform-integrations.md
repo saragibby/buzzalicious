@@ -347,3 +347,63 @@ rate limiting is never anything but transient.
 One detail worth keeping: on `twitter-api-v2` the HTTP status is on `.code`, not
 `.status`, and the useful text is on `.data.detail` — `.message` is a generic wrapper.
 Classifying on `.message` alone means the read-only rule never fires at all.
+
+## Meta family — what W6 PR 2 established
+
+### Classify on the Graph code, never on the HTTP status
+
+Graph answers a revoked token (`190`), a missing app permission (`200`), a bad parameter
+(`100`) and a policy block (`368`) all with **HTTP 400**. Classifying on the status collapses
+all four to `VALIDATION`, and the UI then tells everyone to go and edit their post — including
+the user whose real problem is that their app lost a permission.
+
+So `classifyMetaError` decodes the Graph `code`/`error_subcode` pair and hands the result to
+the shared taxonomy as an explicit `errorClass`, which takes precedence over the message and
+status rules. Unmapped codes deliberately fall through to the existing message-then-status
+path rather than guessing.
+
+This required a small change to `PlatformFailure`: an optional `errorClass`. The first
+attempt round-tripped Meta codes through a synthetic HTTP status, which **cannot express
+`CREDENTIAL`** — there is no status that means "missing app permission" and 400 already means
+validation. The 429 override is now guarded so an explicitly decoded `QUOTA` is not clobbered
+back to `TRANSIENT`.
+
+### Tokens go in the POST body, never the query string
+
+Query strings end up in access logs, proxy logs and error-tracker breadcrumbs. `GraphClient`
+puts the access token in the form body for writes and in an `Authorization: Bearer` header for
+reads. There is a test asserting exactly this, because it is the kind of thing that gets
+"simplified" during a refactor and produces a credential leak with no visible symptom.
+
+### The two-step token exchange is mandatory
+
+A code exchange yields a short-lived token — roughly an hour. Shipping that produces an
+integration that works perfectly while you are testing it and is dead the next morning. Every
+Meta connect exchanges again for a long-lived token before storing.
+
+### Page tokens, not user tokens
+
+A user token cannot publish to a Page. Storing one yields an account that connects cleanly,
+shows green, and fails on its first post. Facebook and Instagram both resolve to a Page token
+at connect time.
+
+### Instagram publishes through a container, and the poll matters
+
+Create a container, poll it to `FINISHED`, then publish. `ERROR` and `EXPIRED` are classified
+`VALIDATION` because an identical retry cannot succeed; a poll timeout is `TRANSIENT` because
+it can. The permalink lookup afterwards is **best-effort on purpose**: a post that went out
+alongside a job reporting failure is the worst possible outcome, because the retry
+double-posts.
+
+### Threads is not Instagram
+
+Its own host (`graph.threads.net`), its own `th_exchange_token` / `th_refresh_token` spellings,
+and **no `debug_token`**. `introspect` says so explicitly rather than replaying the scopes
+recorded at connect time — presenting stored connect-time scopes as if they were a live check
+is exactly the optimism that makes a capability report untrustworthy.
+
+### Missing insights scopes do not make a credential `INSUFFICIENT`
+
+Only the `publish_*` scopes do. Meta reviews `read_insights` on a separate and slower track,
+and an account that can post but cannot yet read metrics is degraded, not broken. Reporting it
+as broken would make every correctly-configured new client look misconfigured on day one.

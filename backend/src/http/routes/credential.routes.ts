@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getPrisma } from '../../platform/db';
 import { ValidationError } from '../../platform/errors';
+import { revokeCredential } from '../../modules/publish/revocation.service';
 import { requireAuth } from '../middleware/require-auth';
 import { requireWorkspace, workspaceOf } from '../middleware/require-scope';
 import {
@@ -107,6 +108,25 @@ export function createCredentialRouter(): Router {
       });
 
       res.json({ report });
+    }),
+  );
+
+  const RevokeSchema = z.object({ reason: z.string().trim().min(1).max(500).optional() });
+
+  // Appended at the end of the route block rather than inserted next to its siblings: W5
+  // is editing neighbouring files in parallel and an append conflicts trivially.
+  router.post(
+    '/:credentialId/revoke',
+    requireWorkspace('workspaceId', { minimumRole: 'ADMIN' }),
+    handle(async (req, res) => {
+      const { db } = workspaceOf(req);
+      const { reason } = RevokeSchema.parse(req.body ?? {});
+
+      // Revocation is a fan-out: the credential, every account minted from it, and every
+      // target queued against those accounts. It is deliberately not a delete — the
+      // history of what was published with which credential is what an incident review
+      // needs, and deleting the row would take the accounts with it by cascade.
+      res.json({ revoked: await revokeCredential(db, req.params.credentialId!, { reason }) });
     }),
   );
 

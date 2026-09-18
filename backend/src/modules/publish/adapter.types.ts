@@ -1,4 +1,9 @@
 import type { AspectRatio, Platform } from '@prisma/client';
+import {
+  PLATFORM_SPECS,
+  type PlatformSpec as CompositionSpec,
+  type SupportedPlatform,
+} from '../template/platform-spec';
 import type { Capability, CredentialCapabilities, PlatformMeta } from './credential.schemas';
 
 /**
@@ -169,25 +174,46 @@ export interface StoredAccount {
 /**
  * Static facts about a platform, used by the composer and the pipeline.
  *
- * Lives on the adapter rather than in a UI constant so that adding LinkedIn is one new
- * file. A caption limit hardcoded per screen is a caption limit that disagrees with
- * itself by the third screen.
+ * ## One table, and the adapter cannot disagree with it
+ *
+ * This used to be a second, independent declaration of `captionMaxLength`,
+ * `supportedRatios`, `mediaRequired` and `linkBehavior`, restated per adapter alongside
+ * `PLATFORM_SPECS` in `modules/template/platform-spec.ts`. The X pair agreed, by luck and
+ * attention rather than by construction, and three more pairs were about to be written.
+ *
+ * They must not drift, because the two are read at opposite ends of the same user action:
+ * the composer counts a caption with the `template` table and the publisher gated on the
+ * adapter's. When those disagree the product previews a post it will later refuse — which
+ * is not hypothetical, it shipped, and it fired on any caption containing a link.
+ *
+ * So a `PlatformSpec` is now the composer-facing table **plus** the fields only an adapter
+ * has an opinion about. `buildAdapterSpec` is the only way to make one, and it takes
+ * exactly the adapter-only fields: restating a shared one is a type error, not a review
+ * comment. Adding LinkedIn is still one new file.
  */
-export interface PlatformSpec {
-  readonly captionMaxLength: number;
-  readonly supportedRatios: readonly AspectRatio[];
-  readonly mediaRequired: boolean;
+export interface AdapterOnlySpec {
   readonly maxMediaCount: number;
   /** Native platform scheduling, as opposed to ours. False everywhere in v1. */
   readonly supportsScheduling: boolean;
-  readonly hashtagLimit?: number;
-  /**
-   * Where a link can usefully go. This is an outcome-spine concern, not cosmetics:
-   * Instagram feed captions do not render clickable links, so a short link in one earns
-   * no clicks and the feedback loop learns nothing from that post.
-   */
-  readonly linkBehavior: 'inline' | 'bio-only' | 'first-comment';
   readonly requiredScopes: Readonly<Record<Capability, readonly string[]>>;
+}
+
+export type PlatformSpec = CompositionSpec & AdapterOnlySpec;
+
+/**
+ * Build an adapter's spec from the shared table.
+ *
+ * The `?: never` mapped type is the load-bearing part: it makes every composer-facing key
+ * unpassable here, so an adapter physically cannot declare its own caption limit or ratio
+ * list. A convention that says "don't restate these" only holds until someone is in a
+ * hurry; a type error holds always.
+ */
+export function buildAdapterSpec(
+  platform: SupportedPlatform,
+  adapterOnly: AdapterOnlySpec & { readonly [K in keyof CompositionSpec]?: never },
+): PlatformSpec {
+  const { maxMediaCount, supportsScheduling, requiredScopes } = adapterOnly;
+  return { ...PLATFORM_SPECS[platform], maxMediaCount, supportsScheduling, requiredScopes };
 }
 
 export interface PlatformAdapter {
