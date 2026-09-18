@@ -52,4 +52,29 @@ export function applyTestEnv(): void {
   process.env.ENCRYPTION_KEY_ID ??= 'k1';
   process.env.STORAGE_DRIVER ??= 'local';
   process.env.LOG_LEVEL ??= 'silent';
+
+  // Credentials for third-party APIs are **overwritten, not defaulted**. `??=` defers to
+  // whatever is already set, and `backend/.env` is loaded before this runs — so a
+  // developer's real key wins on their machine and loses in CI, which is precisely the
+  // per-machine divergence the rest of this function exists to prevent.
+  //
+  // This is not hypothetical. `tests/db/trend.test.ts` drives `mapTrend`, which reaches
+  // `classifyWithLlm` and calls a provider for real: with a live `OPENAI_API_KEY` present
+  // the file took 41s and timed out two tests, and with these fakes it takes 3s and
+  // passes. Every run was issuing billable requests to OpenAI.
+  //
+  // A test must not be able to reach a third-party API. Anything outbound belongs behind
+  // a stub, so add new provider credentials to this list rather than the block above.
+  for (const key of [
+    'OPENAI_API_KEY',
+    'GEMINI_API_KEY',
+    'AZURE_OPENAI_API_KEY',
+    'AZURE_OPENAI_DEPLOYMENT',
+    'AZURE_OPENAI_API_VERSION',
+  ]) {
+    process.env[key] = `test-fake-${key.toLowerCase().replace(/_/g, '-')}`;
+  }
+  // Validated as a URL, so it needs a well-formed one. Unroutable on purpose: if a stub
+  // is ever missed, the call fails fast instead of reaching something real.
+  process.env.AZURE_OPENAI_ENDPOINT = 'http://127.0.0.1:9/test-fake-azure-openai';
 }

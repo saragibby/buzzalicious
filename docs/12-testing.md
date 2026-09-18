@@ -21,10 +21,24 @@ correctly-configured machine is a suite people stop running.
 
 Two things make it hold.
 
-**Fixed fake credentials.** `backend/tests/setup.ts` sets a complete, valid environment
-before anything imports `platform/config`. The values are invented and constant. No test
-reads a developer's `.env`, so a suite that passes locally passes in CI for the same
-reasons.
+**Fixed fake credentials.** `backend/tests/env.ts` sets a complete, valid environment
+before anything imports `platform/config`. The values are invented and constant.
+
+Most are assigned with `??=`, so the workflow or a developer can override them. **Anything
+that authenticates against a third party is not** — provider credentials are overwritten
+unconditionally, even when already set. That asymmetry is the whole point: `backend/.env`
+is gitignored and loaded before the tests run, so a developer has real keys where CI has
+none, and the suite diverges per machine in the one direction nobody checks.
+
+It is not hypothetical. `tests/db/trend.test.ts` drives `mapTrend` → `classifyWithLlm`,
+which calls a provider for real. With a live `OPENAI_API_KEY` present, that file took 41s
+and timed out two tests; with fakes it takes 3s and passes — and every run in between was
+issuing billable requests to OpenAI. The failure looked like flakiness, which is why it
+survived four merges.
+
+**A test must not be able to reach a third-party API.** Anything outbound belongs behind a
+stub. New provider credentials go in the forced list in `env.ts`, not the `??=` block, and
+`tests/env.test.ts` asserts a real-looking key is replaced rather than deferred to.
 
 **Database tests opt in.** They run only when `TEST_DATABASE_URL` is set, and skip
 otherwise:
@@ -123,14 +137,36 @@ There is no separate migration step, and there should not be one: the global set
 migrations, so the database tests and the deploy-path rehearsal cannot drift apart.
 
 CI holds no credentials at all, real or fake. The test environment lives in
-`backend/tests/setup.ts` and nowhere else — every variable there is assigned with `??=`,
-so anything the workflow exports silently overrides it. The workflow sets only
-`TEST_DATABASE_URL`, which is the one thing `setup.ts` cannot know.
+`backend/tests/env.ts` and nowhere else — the general variables there are assigned with
+`??=`, so anything the workflow exports silently overrides it. The workflow sets only
+`TEST_DATABASE_URL`, which is the one thing `env.ts` cannot know. Provider credentials are
+the deliberate exception and cannot be overridden; see above.
 
 This is not a style preference. The first version of the workflow duplicated the whole
 fake environment and mistyped `ENCRYPTION_KEY` by four characters; CI then fed that
 invalid key to every test and the suite failed in a way that passed locally. One
 definition of the test environment, or two that disagree.
+
+### A pull request opened while conflicted gets no CI at all
+
+`pull_request` workflows run against `refs/pull/N/merge`, and GitHub only creates that ref
+when the PR merges cleanly. Open a PR that already conflicts with its base and the ref
+never exists, so **no run is ever scheduled** — not queued, not failed, not pending.
+The checks area is simply empty, and it stays that way until someone pushes.
+
+This bit us for real: PR #4 was opened 47 seconds after another workstream merged the
+change that conflicted with it, and got zero runs. The PRs that opened while clean each
+got a run within ~3 seconds.
+
+It is a trap for parallel workstreams specifically, and it scales with them: the first
+branch to merge is fine, and the second and third are the ones exposed. So:
+
+- **Merge `main` into your branch and resolve conflicts _before_ opening the PR.**
+- An empty checks list means "never scheduled", not "still starting". Waiting will not
+  fix it — push a commit.
+- Confirm a run exists rather than assuming: `gh pr checks <n>`, or
+  `gh run list --branch <branch>`. A PR reporting `MERGEABLE` / `CLEAN` with no runs is
+  the signature.
 
 ## Current state (end of M2)
 
