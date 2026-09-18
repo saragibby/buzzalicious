@@ -93,7 +93,7 @@ export interface Explanation {
    * ample. Gating the raw number keeps the two gates answering the two different questions
    * they were each designed for: "did we see enough?" and "was what we saw worth saying?"
    */
-  readonly claimBasis: 'raw-observed';
+  readonly claimBasis: ClaimBasis;
   /**
    * Why this is in the result set at all, passed through from the selection.
    *
@@ -118,6 +118,29 @@ export interface ExplanationInputs {
   readonly minMultiplier?: number;
 }
 
+/**
+ * The candidate numbers a claim could be built from, keyed by the label that names them.
+ *
+ * This table is the point. `claimBasis` used to be a string literal written *alongside* the
+ * comparison, which made it decorative: switch the comparison to the shrunk value and the
+ * payload would keep announcing `raw-observed`, confidently and falsely, and nothing could
+ * catch it. A provenance field that can be wrong about the thing it describes is worse than
+ * no field at all, because downstream will believe it.
+ *
+ * Here the label **is** the selector. There is no way to read a different number without
+ * naming a different basis, so the two cannot drift apart — the same argument that makes
+ * `ShrunkScore` a brand rather than a comment.
+ */
+const CLAIM_SOURCES = {
+  'raw-observed': (score: ShrunkScore) => score.basis.observed,
+  shrunk: (score: ShrunkScore) => score.shrunkValue,
+} as const;
+
+export type ClaimBasis = keyof typeof CLAIM_SOURCES;
+
+/** Which one we use, and therefore what every payload reports. See the field docs. */
+const CLAIM_BASIS: ClaimBasis = 'raw-observed';
+
 /** One decimal, which is the most precision a claim like this can honestly carry. */
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -136,10 +159,11 @@ export function explain(inputs: ExplanationInputs): Explanation {
   const category = inputs.category ?? null;
   const untried = posts === 0;
 
-  const base = { sampleSize: scored, untried, selection, claimBasis: 'raw-observed' } as const;
+  const base = { sampleSize: scored, untried, selection, claimBasis: CLAIM_BASIS } as const;
 
-  // The raw brand mean. Deliberately not `shrunkValue(score)` — see the header.
-  const observed = score.basis.observed;
+  // Read through the same key that gets reported, so the number and its label are one
+  // decision rather than two that happen to agree today.
+  const observed = CLAIM_SOURCES[CLAIM_BASIS](score);
 
   if (claimable && observed !== null && observed >= minMultiplier) {
     return { ...base, kind: 'brand-claim', multiplier: round1(observed), category };

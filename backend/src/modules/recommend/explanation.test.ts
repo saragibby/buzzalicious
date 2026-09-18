@@ -31,9 +31,39 @@ describe('a claim reports what we measured, not what we believe', () => {
 
     expect(explanation.kind).toBe('brand-claim');
     expect(explanation.multiplier).toBe(2.4);
+    // The label travels with the number it describes, and is read here so that a payload
+    // announcing the wrong provenance is a failing test rather than a quiet lie.
+    expect(explanation.claimBasis).toBe('raw-observed');
     // Stated explicitly so a future change that swaps the source fails here with the
     // reason attached, rather than merely failing an equality on a plausible number.
     expect(explanation.multiplier).not.toBeCloseTo(1.87, 1);
+  });
+
+  it('the reported number is the one its own label names', () => {
+    // The previous test pins the *policy* (we claim on the raw mean). This one pins the
+    // weaker but more durable property underneath it: whatever policy is in force, the
+    // payload is internally coherent — the number a caller receives is the number its
+    // `claimBasis` says it is. It is deliberately indifferent to which basis we choose,
+    // so switching the policy leaves it green while corrupting the table turns it red.
+    //
+    // That split matters. Before the lookup table, `claimBasis` was a literal written
+    // beside the comparison and could disagree with it silently; there was no assertion
+    // that could tell the two apart, which is exactly how it survived a mutation pass.
+    const sources = {
+      'raw-observed': (s: ShrunkScore) => s.basis.observed,
+      shrunk: (s: ShrunkScore) => s.shrunkValue,
+    } as const;
+
+    const subject = score(2.4, 8);
+    const explanation = explain({ ...base, score: subject, scored: 8, posts: 8, claimable: true });
+
+    const named = sources[explanation.claimBasis](subject);
+    expect(named).not.toBeNull();
+    expect(explanation.multiplier).toBe(Math.round((named as number) * 10) / 10);
+
+    // Positive control: the two bases are genuinely different numbers here, so the
+    // agreement above is a real constraint rather than one satisfied by coincidence.
+    expect(sources['raw-observed'](subject)).not.toBe(sources.shrunk(subject));
   });
 
   it('is unmoved by k, because a measurement does not shrink', () => {
