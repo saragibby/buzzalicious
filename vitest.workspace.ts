@@ -17,6 +17,11 @@ export default defineWorkspace([
       environment: 'node',
       include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
       setupFiles: ['./tests/setup.ts'],
+      // Applies migrations when TEST_DATABASE_URL is set; a no-op otherwise.
+      globalSetup: ['./tests/global-setup.ts'],
+      // Database tests share one Postgres. Running the files in parallel against it makes
+      // failures depend on interleaving, which is the worst kind of flake to chase.
+      fileParallelism: false,
     },
   },
   {

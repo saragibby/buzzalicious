@@ -15,10 +15,13 @@ jobs:
     name: Lint, type-check, test, build
     runs-on: ubuntu-latest
 
-    # The M1 suite does not need Postgres — database tests opt in via
-    # TEST_DATABASE_URL and skip when it is unset. The service is here so that
-    # W2 onwards can add migration and repository tests without also having to
-    # work out CI. See docs/12-testing.md.
+    # Database tests opt in via TEST_DATABASE_URL and skip when it is unset, so
+    # the suite still passes on a clean clone with no Postgres. Here it is set,
+    # so they run — and backend/tests/global-setup.ts applies migrations with
+    # `prisma migrate deploy`, the same command the Procfile runs on release.
+    # There is deliberately no separate migration step in this workflow: one
+    # place applies the schema, so the tests and the deploy path cannot drift.
+    # See docs/12-testing.md.
     services:
       postgres:
         image: postgres:16
