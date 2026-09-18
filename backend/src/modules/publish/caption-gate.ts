@@ -4,9 +4,9 @@ import type { ScopedDb } from '../../platform/tenancy';
 import {
   PLATFORM_SPECS,
   isSupportedPlatform,
-  measureCaption,
   type SupportedPlatform,
 } from '../template/platform-spec';
+import { measureWithLink } from '../link/link-injection';
 
 /**
  * The schedule-time caption gate.
@@ -57,8 +57,20 @@ export function effectiveCaption(override: string | null, base: string | null): 
   return base ?? '';
 }
 
+/**
+ * Measure a caption **as it will be published**, tracked link included.
+ *
+ * `measureWithLink` rather than `measureCaption`: a caption containing `{{link}}` gets
+ * longer when the link goes in, and the gate has to judge the text the platform will
+ * actually receive. Measuring the raw caption would accept a post that publish then
+ * rejects — the composer-promises-what-publish-refuses bug this gate exists to close,
+ * reintroduced through the back door.
+ *
+ * A caption without the marker measures exactly as before, so this is a safe swap rather
+ * than a behaviour change for the common case.
+ */
 export function measureFor(platform: SupportedPlatform, caption: string): CaptionMeasurement {
-  const count = measureCaption(platform, caption);
+  const count = measureWithLink(platform, caption);
   return {
     platform,
     used: count.used,

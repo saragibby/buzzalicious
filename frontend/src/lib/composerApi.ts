@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchRaw } from './api';
+import type { LinkPreview } from './captionCount';
 import type { Platform } from './brandApi';
 
 /**
@@ -180,9 +181,17 @@ export async function fetchTemplate(slug: string): Promise<TemplateDetail> {
   return template;
 }
 
-export async function fetchPlatformSpecs(): Promise<PlatformSpec[]> {
-  const { platforms } = await apiFetch<{ platforms: PlatformSpec[] }>('/api/platforms');
-  return platforms;
+export async function fetchPlatformSpecs(): Promise<{
+  platforms: PlatformSpec[];
+  linkPreview: LinkPreview | null;
+}> {
+  const body = await apiFetch<{ platforms: PlatformSpec[]; linkPreview?: LinkPreview }>(
+    '/api/platforms',
+  );
+  // `linkPreview` is optional on the wire so a browser running against an older API keeps
+  // counting rather than crashing — it just counts without the link, which is the old
+  // behaviour rather than a wrong number dressed up as a right one.
+  return { platforms: body.platforms, linkPreview: body.linkPreview ?? null };
 }
 
 export async function renderPreview(

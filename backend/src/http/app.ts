@@ -20,6 +20,8 @@ import { createWorkspaceRouter } from './routes/workspace.routes';
 import { createCredentialRouter } from './routes/credential.routes';
 import { createOAuthRouter } from './routes/oauth.routes';
 import { createPublishRouter } from './routes/publish.routes';
+import { createShortLinkRouter } from './routes/short-link.routes';
+import { createInsightRouter } from './routes/insight.routes';
 
 /**
  * Builds the Express application. Deliberately separate from `index.ts` so tests can
@@ -106,7 +108,20 @@ export function createApp(): Application {
   // a session.
   app.use('/api/workspaces/:workspaceId/credentials', createCredentialRouter());
   app.use('/api/brands/:brandId/publishing', createPublishRouter());
+
+  // W7. Insight reads are per brand for the same reason drafts are: the numbers belong to
+  // a brand, and the router resolves `:brandId` into a tenant-scoped client itself.
+  app.use('/api/brands/:brandId/insights', createInsightRouter());
   app.use('/oauth', createOAuthRouter());
+
+  // W7. The public redirector. No session, no tenant — it is reached by strangers
+  // clicking a link in a published post, so it sits outside `/api` and outside every
+  // auth-bearing prefix.
+  //
+  // Mounted before the SPA fallback deliberately: in production `app.get('*')` would
+  // otherwise answer `/s/:slug` with index.html and a 200, and every click would land on
+  // an empty React shell instead of the destination.
+  app.use('/s', createShortLinkRouter());
 
   if (shouldMountFilesRouter()) {
     app.use('/api/files', createFilesRouter());

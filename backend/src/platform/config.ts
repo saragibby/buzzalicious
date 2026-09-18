@@ -168,6 +168,50 @@ const baseSchema = z.object({
 
   /** Attempts per publish job before a target is marked FAILED. */
   PUBLISH_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+
+  /**
+   * Salt for click IP hashing (W7, docs/06, ADR-0006).
+   *
+   * Raw IPs are never stored. A *bare* SHA-256 of an IP is not meaningfully better: the
+   * whole IPv4 space is 2^32 digests, which is minutes of work to enumerate, so an
+   * unsalted hash is reversible and therefore still PII. The salt is what makes the
+   * pseudonymisation real.
+   *
+   * Required in production — see the `superRefine` below, which fails boot rather than
+   * letting a deploy quietly store reversible hashes. Elsewhere it defaults, and the
+   * default deliberately reads as a non-secret so it cannot be mistaken for one.
+   *
+   * Rotation invalidates comparability: `(ipHash, shortLinkId)` deduplication cannot see
+   * across a rotation boundary, and neither can any historical unique-visitor count. The
+   * dedup window is minutes, so rotation costs at most one window of duplicate suppression.
+   */
+  LINK_CLICK_IP_SALT: z.string().min(16, 'must be at least 16 characters').optional(),
+
+  /**
+   * Suppress clicks arriving within this many seconds of the post going live.
+   *
+   * Every platform fetches a link preview the instant a post publishes, often several
+   * times and always before a human could have seen it. This is the time-proximity half
+   * of the layered bot defence; the datacenter-IP-range half is deliberately not in v1.
+   */
+  LINK_CLICK_PUBLISH_PROXIMITY_SECONDS: z.coerce.number().int().min(0).default(90),
+
+  /** Window for `(ipHash, shortLinkId)` duplicate suppression. */
+  LINK_CLICK_DEDUPE_WINDOW_SECONDS: z.coerce.number().int().min(0).default(600),
+
+  /**
+   * Outcome score weights (docs/06). In config rather than code so they can be tuned as
+   * real data arrives, which is the stated intent — the starting values express the
+   * product thesis that clicks and saves indicate intent while likes indicate scrolling.
+   *
+   * Not normalised for you: they are asserted to sum to 1 below, because a set that sums
+   * to 1.3 produces scores that are not comparable to anything previously computed and
+   * nothing downstream would notice.
+   */
+  OUTCOME_WEIGHT_CLICK: z.coerce.number().min(0).max(1).default(0.45),
+  OUTCOME_WEIGHT_SAVE: z.coerce.number().min(0).max(1).default(0.25),
+  OUTCOME_WEIGHT_SHARE: z.coerce.number().min(0).max(1).default(0.2),
+  OUTCOME_WEIGHT_ENGAGE: z.coerce.number().min(0).max(1).default(0.1),
 });
 
 /**
@@ -213,6 +257,34 @@ const schema = baseSchema
         path: ['STORAGE_DRIVER'],
         message:
           'cannot be "local" in production — the dyno filesystem is ephemeral, so stored files would not survive a restart. Use "r2".',
+      });
+    }
+
+    // An unsalted IP hash is reversible by enumerating the IPv4 space, so booting without
+    // this would mean storing recoverable PII while believing we had not. Fails closed.
+    if (env.NODE_ENV === 'production' && !env.LINK_CLICK_IP_SALT) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['LINK_CLICK_IP_SALT'],
+        message:
+          'is required in production — without it click IP hashes are reversible by enumerating the IPv4 space, which makes them PII. Generate with: openssl rand -base64 32',
+      });
+    }
+
+    const weightTotal =
+      env.OUTCOME_WEIGHT_CLICK +
+      env.OUTCOME_WEIGHT_SAVE +
+      env.OUTCOME_WEIGHT_SHARE +
+      env.OUTCOME_WEIGHT_ENGAGE;
+
+    // Floating point, so compare with a tolerance rather than to 1 exactly: 0.45 + 0.25 +
+    // 0.2 + 0.1 is 0.9999999999999999, and an equality check would reject the documented
+    // defaults.
+    if (Math.abs(weightTotal - 1) > 1e-9) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['OUTCOME_WEIGHT_CLICK'],
+        message: `outcome weights must sum to 1, but OUTCOME_WEIGHT_CLICK + _SAVE + _SHARE + _ENGAGE = ${weightTotal}. Scores computed with a different total are not comparable to previously stored ones, and nothing downstream would notice.`,
       });
     }
   })
@@ -300,6 +372,32 @@ const schema = baseSchema
         X: appOrUndefined(env.PLATFORM_APP_X_KEY, env.PLATFORM_APP_X_SECRET),
         META: appOrUndefined(env.PLATFORM_APP_META_ID, env.PLATFORM_APP_META_SECRET),
         THREADS: appOrUndefined(env.PLATFORM_APP_THREADS_ID, env.PLATFORM_APP_THREADS_SECRET),
+      },
+    },
+
+    /**
+     * First-party link tracking (W7, ADR-0006).
+     *
+     * `baseUrl` is derived once here rather than at each call site, and its length is
+     * load-bearing: `link-injection.ts` computes how many characters `{{link}}` expands to
+     * from it, which is what lets the composer and the publisher agree on a caption's
+     * measured length. A second place that spelled this URL would be a second place for
+     * that arithmetic to drift.
+     */
+    link: {
+      baseUrl: `${env.APP_URL}/s`,
+      ipSalt: env.LINK_CLICK_IP_SALT,
+      publishProximitySeconds: env.LINK_CLICK_PUBLISH_PROXIMITY_SECONDS,
+      dedupeWindowSeconds: env.LINK_CLICK_DEDUPE_WINDOW_SECONDS,
+    },
+
+    /** Outcome score weights (docs/06). Asserted to sum to 1 by the superRefine above. */
+    outcome: {
+      weights: {
+        click: env.OUTCOME_WEIGHT_CLICK,
+        save: env.OUTCOME_WEIGHT_SAVE,
+        share: env.OUTCOME_WEIGHT_SHARE,
+        engage: env.OUTCOME_WEIGHT_ENGAGE,
       },
     },
   }));
