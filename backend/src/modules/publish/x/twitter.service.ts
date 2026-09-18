@@ -1,3 +1,20 @@
+/**
+ * PARKED — carried over from the prototype for W6, not wired into anything.
+ *
+ * Nothing imports this file. It is kept because the API-shape knowledge in it is real
+ * and worth preserving: `v1.uploadMedia` for media and `v2.tweet` for posting, in the
+ * same client, and the fixed-length tuple that `media_ids` demands.
+ *
+ * **W6 must rewrite the constructor before using this.** It reads
+ * `process.env.TWITTER_API_KEY` / `TWITTER_API_SECRET`, which contradicts ADR-0009: every
+ * `PlatformAdapter` method takes an already-resolved credential and no adapter reads the
+ * environment. The app key and secret belong to the *client's* X app, resolved per
+ * workspace by the `CredentialResolver`, and differ between workspaces.
+ *
+ * The OAuth 1.0a handshake that produces `accessToken`/`accessSecret` is not here — it
+ * lived in the deleted `social.routes.ts` and is captured in
+ * `docs/reference/x-oauth1a.md`. Read that before implementing the adapter.
+ */
 import { TwitterApi } from 'twitter-api-v2';
 
 export class TwitterService {

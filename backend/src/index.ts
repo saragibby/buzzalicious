@@ -1,161 +1,84 @@
-import express, { Application, Request, Response } from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import session from 'express-session';
-import prisma from './db';
-import path from 'path';
-import passportConfig from './auth';
-import { isAuthenticated } from './middleware/auth';
+import 'dotenv/config';
+import type { Server } from 'node:http';
+import { loadConfigOrExit } from './platform/boot';
+import { getLogger } from './platform/logger';
+import { disconnectPrisma } from './platform/db';
+import { createApp } from './http/app';
+import { startWorker, stopWorker } from './jobs';
 
-dotenv.config();
+/**
+ * Web process entry point.
+ *
+ * A thin bootstrap and nothing else: validate config, build the app, listen, and shut
+ * down cleanly. The prototype's `index.ts` also held routes, Prisma queries and a
+ * `setInterval` scheduler; all of that now lives where it belongs.
+ */
+async function main(): Promise<void> {
+  const config = loadConfigOrExit();
+  const logger = getLogger();
 
-const getFrontendUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.FRONTEND_URL || 'https://your-app.herokuapp.com';
+  const app = createApp();
+  const server: Server = app.listen(config.port, () => {
+    logger.info(
+      { port: config.port, env: config.env, storage: config.storage.driver },
+      'API listening',
+    );
+  });
+
+  // In-process consumers behind a flag, per docs/01-architecture.md. On Heroku the worker
+  // runs as its own dyno, so this stays false on web dynos.
+  if (config.workerEnabled) {
+    await startWorker();
   }
-  return 'http://127.0.0.1:3000';
-};
 
-const app: Application = express();
-const PORT = process.env.PORT || 3001;
-
-// Middleware
-app.use(cors({
-  origin: getFrontendUrl(),
-  credentials: true,
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Session configuration
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: false, // Must be false for http://
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      domain: undefined, // Don't set domain to allow both localhost and 127.0.0.1
-    },
-  })
-);
-
-// Passport initialization
-app.use(passportConfig.initialize());
-app.use(passportConfig.session());
-
-// Serve static files from frontend build (production only)
-if (process.env.NODE_ENV === 'production') {
-  const frontendPath = path.join(__dirname, '../../frontend/dist');
-  app.use(express.static(frontendPath));
+  registerShutdown(server);
 }
 
-// Routes
-app.get('/', (_req: Request, res: Response) => {
-  if (process.env.NODE_ENV === 'production') {
-    res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
-  } else {
-    res.json({ 
-      message: 'Welcome to Buzzalicious API',
-      endpoints: {
-        health: '/api/health',
-        users: '/api/users',
-        templates: '/api/templates'
+function registerShutdown(server: Server): void {
+  const logger = getLogger();
+  let shuttingDown = false;
+
+  const shutdown = (signal: NodeJS.Signals) => {
+    void (async () => {
+      // Heroku sends SIGTERM and SIGKILLs 30s later. A second signal must not restart
+      // the sequence.
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info({ signal }, 'Shutting down');
+
+      const timeout = setTimeout(() => {
+        logger.error('Graceful shutdown timed out; forcing exit');
+        process.exit(1);
+      }, 25_000);
+      timeout.unref();
+
+      try {
+        // Stop accepting connections, drain in-flight requests, then release resources.
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        });
+        await stopWorker();
+        await disconnectPrisma();
+        logger.info('Shutdown complete');
+        process.exit(0);
+      } catch (error) {
+        logger.error({ err: error }, 'Shutdown failed');
+        process.exit(1);
       }
-    });
-  }
-});
+    })();
+  };
 
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', message: 'Backend is running' });
-});
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
-app.get('/api', (_req: Request, res: Response) => {
-  res.json({ message: 'Welcome to Buzzalicious API' });
-});
-
-// Auth routes
-app.get('/auth/google',
-  passportConfig.authenticate('google', { scope: ['profile', 'email'] })
-);
-
-app.get('/auth/google/callback',
-  passportConfig.authenticate('google', { failureRedirect: '/' }),
-  (_req: Request, res: Response) => {
-    // Successful authentication
-    res.redirect(getFrontendUrl());
-  }
-);
-
-app.get('/auth/logout', (req: Request, res: Response) => {
-  req.logout((err: any) => {
-    if (err) {
-      return res.status(500).json({ error: 'Logout failed' });
-    }
-    return res.json({ message: 'Logged out successfully' });
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason }, 'Unhandled promise rejection');
   });
-});
 
-app.get('/auth/me', isAuthenticated, (req: Request, res: Response) => {
-  console.log('Auth check - Session ID:', req.sessionID);
-  console.log('Auth check - User:', req.user ? 'exists' : 'null');
-  res.json(req.user);
-});
-
-// Database endpoints (protected)
-app.get('/api/users', isAuthenticated, async (_req: Request, res: Response) => {
-  try {
-    const users = await prisma.user.findMany({
-      include: {
-        templates: true,
-      },
-    });
-    res.json(users);
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Failed to fetch users' });
-  }
-});
-
-app.get('/api/templates', isAuthenticated, async (_req: Request, res: Response) => {
-  try {
-    const templates = await prisma.template.findMany({
-      include: {
-        user: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-    res.json(templates);
-  } catch (error) {
-    console.error('Error fetching templates:', error);
-    res.status(500).json({ error: 'Failed to fetch templates' });
-  }
-});
-
-// Catch-all route for SPA (must be after API routes)
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (_req: Request, res: Response) => {
-    res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+  process.on('uncaughtException', (error) => {
+    logger.fatal({ err: error }, 'Uncaught exception; exiting');
+    process.exit(1);
   });
 }
 
-// Start server
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://127.0.0.1:${PORT}`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  server.close(async () => {
-    await prisma.$disconnect();
-    console.log('HTTP server closed');
-  });
-});
-
-export default app;
+void main();

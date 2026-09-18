@@ -1,0 +1,153 @@
+/**
+ * Typed application errors.
+ *
+ * The prototype leaked internals to clients (`details: error.message` straight from a
+ * third-party SDK) and handled failures inconsistently. The contract here:
+ *
+ *  - Throw an `AppError` subclass for anything a client should be told about.
+ *  - Throw anything else for a bug. The error middleware turns it into a bare 500 and
+ *    logs the detail server-side.
+ *
+ * `expose` is what separates the two. Nothing with `expose: false` reaches a response
+ * body, ever.
+ */
+
+export type ErrorCode =
+  | 'VALIDATION_FAILED'
+  | 'NOT_FOUND'
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN'
+  | 'EXTERNAL_SERVICE_ERROR'
+  | 'RATE_LIMITED'
+  | 'INTERNAL_ERROR';
+
+export abstract class AppError extends Error {
+  abstract readonly code: ErrorCode;
+  abstract readonly status: number;
+
+  /** Whether `message` and `details` may be returned to the client. */
+  readonly expose: boolean = true;
+
+  /** Safe, structured context for the client. Must never contain a secret. */
+  readonly details?: unknown;
+
+  constructor(message: string, options?: { details?: unknown; cause?: unknown }) {
+    super(message, { cause: options?.cause });
+    this.name = new.target.name;
+    this.details = options?.details;
+    Error.captureStackTrace?.(this, new.target);
+  }
+}
+
+/** 400 — the request was understood but is not acceptable. */
+export class ValidationError extends AppError {
+  readonly code = 'VALIDATION_FAILED' as const;
+  readonly status = 400;
+}
+
+/** 401 — no valid session. */
+export class AuthError extends AppError {
+  readonly code = 'UNAUTHENTICATED' as const;
+  readonly status = 401;
+
+  constructor(message = 'Not authenticated', options?: { details?: unknown; cause?: unknown }) {
+    super(message, options);
+  }
+}
+
+/** 403 — authenticated, but not permitted. Distinct from 401 so the SPA can tell them apart. */
+export class ForbiddenError extends AppError {
+  readonly code = 'FORBIDDEN' as const;
+  readonly status = 403;
+
+  constructor(message = 'Not permitted', options?: { details?: unknown; cause?: unknown }) {
+    super(message, options);
+  }
+}
+
+/** 404 */
+export class NotFoundError extends AppError {
+  readonly code = 'NOT_FOUND' as const;
+  readonly status = 404;
+
+  constructor(resource = 'Resource', options?: { details?: unknown; cause?: unknown }) {
+    super(`${resource} not found`, options);
+  }
+}
+
+/** 429 — ours or a platform's. `retryAfterSeconds` drives the header and job backoff. */
+export class RateLimitError extends AppError {
+  readonly code = 'RATE_LIMITED' as const;
+  readonly status = 429;
+
+  constructor(
+    message = 'Too many requests',
+    readonly retryAfterSeconds?: number,
+    options?: { details?: unknown; cause?: unknown },
+  ) {
+    super(message, options);
+  }
+}
+
+/**
+ * 502 — a third party failed us. Not exposed: upstream error bodies routinely echo back
+ * request parameters, and for OAuth calls those parameters are credentials.
+ */
+export class ExternalServiceError extends AppError {
+  readonly code = 'EXTERNAL_SERVICE_ERROR' as const;
+  readonly status = 502;
+  readonly expose = false;
+
+  constructor(
+    readonly service: string,
+    message: string,
+    options?: { details?: unknown; cause?: unknown; retryable?: boolean },
+  ) {
+    super(message, options);
+    this.retryable = options?.retryable ?? true;
+  }
+
+  /** Whether a job should retry. A 4xx from a platform usually should not. */
+  readonly retryable: boolean;
+}
+
+export function isAppError(error: unknown): error is AppError {
+  return error instanceof AppError;
+}
+
+/** The only error shape the API returns. */
+export interface ErrorBody {
+  error: {
+    code: ErrorCode;
+    message: string;
+    details?: unknown;
+    requestId?: string;
+  };
+}
+
+export function toErrorBody(error: unknown, requestId?: string): ErrorBody {
+  if (isAppError(error) && error.expose) {
+    return {
+      error: {
+        code: error.code,
+        message: error.message,
+        ...(error.details === undefined ? {} : { details: error.details }),
+        ...(requestId ? { requestId } : {}),
+      },
+    };
+  }
+
+  const code: ErrorCode = isAppError(error) ? error.code : 'INTERNAL_ERROR';
+
+  return {
+    error: {
+      code,
+      message: 'Something went wrong. Please try again.',
+      ...(requestId ? { requestId } : {}),
+    },
+  };
+}
+
+export function statusFor(error: unknown): number {
+  return isAppError(error) ? error.status : 500;
+}
