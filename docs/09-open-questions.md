@@ -204,6 +204,38 @@ values.
 
 Keep them in config. Revisit after ~50 published posts across the dogfood brands.
 
+### Q24 — "Why does X never win?" — the coverage bias, live in `main`
+
+**This is not an open design question. It is a documented, deliberate behaviour that will
+arrive disguised as a bug report.** Recording it here because [`06`](./06-outcome-and-feedback-loop.md)
+explains it to whoever is changing the scorer, and this file is what gets read when someone
+is confused by the output.
+
+Only Meta reports `reach`; X and Threads hard-code it `null`, so the scorer normalises over
+`impressions`. Unmeasured components are imputed at 1.0 ("assume typical"), which is the
+only value that biases the score in neither direction — but it also damps how far a score
+can travel from neutral. Consequences, all intended:
+
+- A clicks-only platform needs roughly **1.44× true lift** to clear a 1.2 claim floor,
+  where a fully-measured platform needs 1.2×.
+- The same brand doing the same thing can earn a brand-specific sentence on Instagram and
+  not on X.
+- Ranked lists over-represent well-measured platforms at **both** ends, because their
+  scores have more room to move. Only the top end gets looked at, so it reads as a finding.
+
+Nothing misleading ships — the floor holds the line on false claims. The risk is the
+opposite: it is systematically harder for a thinly-measured archetype to earn a claim, and
+that looks like *"low-coverage platforms don't perform"* to anyone reading output rather
+than source.
+
+**Do not "fix" this by lowering the floor or dropping imputation.** Both were considered
+and are worse: a zero claims the post failed, and coverage division cancels the weights
+entirely. The priced candidate is rank combination (Borda) across platforms, written up in
+[`06`](./06-outcome-and-feedback-loop.md) and deliberately out of v1.
+
+**Revisit when** a dogfood brand has enough history on both a Meta and a non-Meta platform
+to compare — the same threshold as Q12, and worth doing in the same pass.
+
 ### Q13 — Pricing model
 
 Not required for phase 1, but it shapes what usage must be metered. Competitors meter
