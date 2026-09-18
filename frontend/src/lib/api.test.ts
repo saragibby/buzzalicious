@@ -1,14 +1,29 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, apiFetch, getBackendUrl } from './api';
 
 describe('getBackendUrl', () => {
+  beforeEach(() => {
+    // A developer's gitignored frontend/.env sets VITE_API_URL, and Vitest loads Vite env
+    // files. Without this the override short-circuits getBackendUrl and the fallback tests
+    // below assert nothing — two of them passed against the env value rather than the
+    // hostname logic they claim to cover. Each test states the env it needs.
+    vi.stubEnv('VITE_API_URL', '');
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   function withLocation(hostname: string, origin: string) {
     vi.stubGlobal('window', { ...window, location: { hostname, origin } });
   }
+
+  it('prefers an explicitly configured API URL over any inference', () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.com');
+    withLocation('buzz.example.com', 'https://buzz.example.com');
+    expect(getBackendUrl()).toBe('https://api.example.com');
+  });
 
   it('uses the explicit port locally', () => {
     withLocation('127.0.0.1', 'http://127.0.0.1:5173');
