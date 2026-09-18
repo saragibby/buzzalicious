@@ -223,6 +223,56 @@ describe.skipIf(!hasTestDatabase)('composer backend', () => {
 
       await deleteDraft(rise, draft.id);
     });
+
+    /**
+     * `PostTarget` carries no tenant column. Its scope rule reaches through the relation —
+     * `{ post: { brandId } }` — and `setCaptionOverrides` writes it with `updateMany`,
+     * whose result count is deliberately ignored (a stale tab's caption for an unticked
+     * platform is a no-op, not an error).
+     *
+     * That combination means a broken relation rule would let one workspace rewrite
+     * another's captions **silently**: no throw, no error, nothing in the response. The
+     * draft-level tests above do not cover it, because they are stopped earlier by the
+     * `Post` rule, which uses the row's own column.
+     *
+     * Asserted on the caption's *value* read back by the owner rather than on an affected
+     * count, for the reason a count is untrustworthy here: a rule that filters nothing
+     * returns more rows, so a count assertion passes under the bug.
+     *
+     * The nullable-FK shape that makes these relation rules dangerous elsewhere does not
+     * exist here: `Post.brandId`, `PostTarget.postId` and `Rendition.postId` are all
+     * non-nullable in the schema, so `post` is always present and always carries a brand.
+     * There is no second shape to write a fixture for.
+     */
+    it('will not let another workspace rewrite a caption through the target relation', async () => {
+      const draft = await createDraft(rise, RISE.brandId, {
+        templateSlug: 'big-number',
+        platforms: ['INSTAGRAM'],
+      });
+      await updateDraft(rise, draft.id, { captionOverrides: { INSTAGRAM: 'ours' } });
+
+      // The scoped client is the only thing standing between these two workspaces.
+      const stolen = await taxdedux.postTarget.updateMany({
+        where: { postId: draft.id, platform: 'INSTAGRAM' },
+        data: { caption: 'stolen' },
+      });
+
+      const after = await getDraft(rise, draft.id);
+      const instagram = after.targets.find((target) => target.platform === 'INSTAGRAM');
+      expect(instagram?.caption).toBe('ours');
+
+      // Secondary: the write should have matched nothing at all, not merely failed to
+      // change the value.
+      expect(stolen.count).toBe(0);
+
+      // Positive control — the owner *can* do what the other tenant could not, so the
+      // assertion above cannot pass because captions are simply unwritable.
+      await updateDraft(rise, draft.id, { captionOverrides: { INSTAGRAM: 'ours, edited' } });
+      const edited = await getDraft(rise, draft.id);
+      expect(edited.targets.find((t) => t.platform === 'INSTAGRAM')?.caption).toBe('ours, edited');
+
+      await deleteDraft(rise, draft.id);
+    });
   });
 
   describe('export', () => {
