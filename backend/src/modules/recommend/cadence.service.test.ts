@@ -19,6 +19,8 @@ function weeksOf(options: {
   posts: number;
   clicks: number | null;
   startMonday: string;
+  /** Clicks for one post per week, when a week should not be uniform. */
+  standoutClicks?: number;
 }) {
   const out = [];
   for (let week = 0; week < options.weeks; week += 1) {
@@ -27,14 +29,16 @@ function weeksOf(options: {
     const day = monday.toISOString().slice(0, 10);
 
     for (let post = 0; post < options.posts; post += 1) {
+      const standout = options.standoutClicks !== undefined && post === 0;
+      const clicks = standout ? options.standoutClicks! : options.clicks;
       out.push(
         makeTarget({
           // The start date is in the id because two calls to this helper otherwise
           // generate the same ids and their posts silently merge into one.
           postId: `${options.startMonday}-w${week}-p${post}-${options.posts}`,
           publishedAt: new Date(`${day}T19:00:00Z`),
-          linkClicks: options.clicks,
-          impressions: options.clicks === null ? null : 1000,
+          linkClicks: clicks,
+          impressions: clicks === null ? null : 1000,
         }),
       );
     }
@@ -47,27 +51,46 @@ describe('cadence is scored on total weekly outcome', () => {
     resetTargetSeq();
     // The requirement from docs/06, as arithmetic.
     //
-    // 4 weeks of 8 posts at 10 clicks / 1,000 impressions, and 2 weeks of a single post at
-    // 30 clicks. 32 of the 34 posts sit at a 0.01 click rate, so the brand median is 0.01
-    // and the lone posts normalise to 3.0.
+    // 4 weeks of 8 posts and 2 weeks of a single post. 28 of the 34 posts sit at a 0.01
+    // click rate, so the brand median is 0.01; each 8-post week also carries one standout
+    // at 0.045, and the lone posts sit at 0.03.
     //
-    //   8-post week: each post 0.45*1.0 + 0.55 = 1.00  -> week total 8.00
-    //   1-post week: each post 0.45*3.0 + 0.55 = 1.90  -> week total 1.90
+    //   8-post week: 7 * 1.00 + (0.45*4.5 + 0.55)  -> week total 9.575
+    //   1-post week: 0.45*3.0 + 0.55               -> week total 1.900
     //
     // shrunk toward a prior of n posts, k = 5:
-    //   band 8: (4*8.00 + 5*8) / 9 = 8.00
-    //   band 1: (2*1.90 + 5*1) / 7 = 1.26
+    //   band 8: (4*9.575 + 5*8) / 9 = 8.70
+    //   band 1: (2*1.900 + 5*1) / 7 = 1.26
+    //
+    // The standout exists to keep the band-8 arm SENSITIVE TO k. A uniform 8-post week at
+    // exactly the brand median totals 8.00 against a prior of 8 * 1.0 = 8 — observed
+    // equals prior, which is a fixed point of the shrinkage operator. It returns 8.00 at
+    // every k including k = 0, so the assertion would pass with shrinkage disabled
+    // entirely and all the discriminating power would silently sit in the band-1 arm.
+    //
+    // Note the median is endogenous: band 8 holds most of the posts, so it *defines* the
+    // median and its own posts cannot normalise to anything but 1.0 on average. Skewing
+    // the band with one standout per week is what moves its mean above the median.
     const targets = [
-      ...weeksOf({ weeks: 4, posts: 8, clicks: 10, startMonday: '2026-01-05' }),
+      ...weeksOf({ weeks: 4, posts: 8, clicks: 10, standoutClicks: 45, startMonday: '2026-01-05' }),
       ...weeksOf({ weeks: 2, posts: 1, clicks: 30, startMonday: '2026-03-02' }),
     ];
 
     const result = recommendCadence({ targets, timeZone: DENVER });
     const band = (n: number) => result.bands.find((b) => b.postsPerWeek === n)!;
 
-    expect(shrunkValue(band(8).score)).toBeCloseTo(8.0, 2);
+    expect(shrunkValue(band(8).score)).toBeCloseTo(8.7, 2);
     expect(shrunkValue(band(1).score)).toBeCloseTo(1.26, 2);
     expect(result.suggested).toEqual({ minPerWeek: 8, maxPerWeek: 8 });
+
+    // Both arms move with k, so neither is a fixed point and a k mutation cannot hide in
+    // one of them.
+    const unshrunk = recommendCadence({ targets, timeZone: DENVER, k: 0 });
+    const unshrunkBand = (n: number) =>
+      shrunkValue(unshrunk.bands.find((b) => b.postsPerWeek === n)!.score);
+
+    expect(unshrunkBand(8)).toBeCloseTo(9.575, 2);
+    expect(unshrunkBand(1)).toBeCloseTo(1.9, 2);
   });
 
   it('would rank the other way on per-post average, which is the point', () => {
@@ -76,7 +99,7 @@ describe('cadence is scored on total weekly outcome', () => {
     // the fixture never posed the question — per-post average has to genuinely prefer the
     // single great post, or the assertion above is vacuous.
     const targets = [
-      ...weeksOf({ weeks: 4, posts: 8, clicks: 10, startMonday: '2026-01-05' }),
+      ...weeksOf({ weeks: 4, posts: 8, clicks: 10, standoutClicks: 45, startMonday: '2026-01-05' }),
       ...weeksOf({ weeks: 2, posts: 1, clicks: 30, startMonday: '2026-03-02' }),
     ];
 
@@ -92,7 +115,7 @@ describe('cadence is scored on total weekly outcome', () => {
     // The rarely-posting band has the better average, and a per-post objective would
     // therefore recommend posting once a week.
     expect(perPost(1)).toBeCloseTo(1.9, 2);
-    expect(perPost(8)).toBeCloseTo(1.0, 2);
+    expect(perPost(8)).toBeCloseTo(1.2, 2);
     expect(perPost(1)).toBeGreaterThan(perPost(8));
   });
 
