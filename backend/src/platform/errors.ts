@@ -19,6 +19,10 @@ export type ErrorCode =
   | 'FORBIDDEN'
   | 'EXTERNAL_SERVICE_ERROR'
   | 'RATE_LIMITED'
+  // W10/ADR-0011. Distinct from RATE_LIMITED on purpose: a spend ceiling is not a burst
+  // limit, and "wait and retry" is the wrong advice — nothing changes until the billing
+  // period rolls over. The subclass lives in modules/usage/usage.errors.ts.
+  | 'BUDGET_EXCEEDED'
   | 'INTERNAL_ERROR';
 
 export abstract class AppError extends Error {

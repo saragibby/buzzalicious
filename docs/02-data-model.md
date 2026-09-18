@@ -700,6 +700,96 @@ model AiGeneration {
 }
 ```
 
+`estimatedCost` is a `Float` and stays one. It is a debugging aid on a single call, not a
+number anything is allowed to sum — see the usage meter below, where money is `Decimal`.
+
+### Usage metering (W10)
+
+Added by [ADR-0011](./adr/0011-usage-metering-spine.md). Two tables: an append-only ledger
+and a derived rollup. The ledger is the truth; the rollup exists only so the spend check on
+the hot path is one indexed read instead of an aggregate over history, and can be rebuilt
+from the ledger at any time.
+
+```prisma
+enum UsageMetric {
+  AI_TOKENS
+  POST_PUBLISHED
+  RENDITION_RENDERED
+  TREND_REFRESH
+  CONNECTED_ACCOUNT
+}
+
+model UsageEvent {
+  id              String        @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brandId         String?
+  brand           Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  metric          UsageMetric
+  quantity        Int
+  providerCostUsd Decimal?      @db.Decimal(12, 6)
+  idempotencyKey  String        @unique
+  occurredAt      DateTime      @default(now())
+  periodStart     DateTime
+  // The thing that caused the charge, so "why is this invoice $340" is answerable.
+  // All three SetNull: answering it must never stand in the way of a delete.
+  aiGenerationId  String?
+  aiGeneration    AiGeneration? @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  postTargetId    String?
+  postTarget      PostTarget?   @relation(fields: [postTargetId], references: [id], onDelete: SetNull)
+  renditionId     String?
+  rendition       Rendition?    @relation(fields: [renditionId], references: [id], onDelete: SetNull)
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+
+  @@index([workspaceId, metric, periodStart])
+  @@index([workspaceId, occurredAt])
+  @@index([aiGenerationId])
+  @@map("usage_events")
+}
+
+model UsagePeriodRollup {
+  id              String      @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  metric          UsageMetric
+  periodStart     DateTime
+  periodEnd       DateTime
+  quantity        BigInt      @default(0)
+  providerCostUsd Decimal     @default(0) @db.Decimal(14, 6)
+  eventCount      Int         @default(0)
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([workspaceId, metric, periodStart])
+  @@index([workspaceId, periodStart])
+  @@map("usage_period_rollups")
+}
+```
+
+Things that are load-bearing rather than incidental:
+
+- **There is no `updatedAt` on `UsageEvent`, on purpose.** A mutable billing ledger is not
+  a ledger; a wrongly recorded charge is corrected with a compensating event, not an
+  `UPDATE`.
+- **`providerCostUsd` is `Decimal`, never `Float`** — `(12,6)` on the event, `(14,6)` on the
+  rollup, which has to hold a sum of them. Six decimal places because a
+  single cheap model call costs a fraction of a cent, and a rounded-to-cents ledger would
+  record most of the platform's AI usage as zero.
+- **`idempotencyKey` is uniquely constrained**, and emit is `createMany({ skipDuplicates })`
+  — the rollup advances only when the insert actually recorded a row. A retried job must
+  not double-bill, and a job runner that retries is the design (pg-boss).
+- **`quantity` is `Int` on the event and `BigInt` on the rollup.** One call's tokens fit in
+  an `Int` comfortably; a year of a busy workspace's tokens summed into one row does not.
+- **`periodStart` is UTC month truncation**, stored on the event at write time rather than
+  derived at read time, so an event can never migrate between periods.
+- **`brandId` is `SetNull`, not `Cascade`.** Deleting a brand must not erase the record that
+  its spend happened; the money left the account either way.
+- **The reserved `platform` workspace** owns platform-global spend, principally trend
+  classification, which belongs to no tenant (ADR-0010). It is created by the W10 migration.
+- `Workspace.aiMonthlyCeilingUsd` (`Decimal(10,2)`, nullable) overrides the
+  `AI_MONTHLY_CEILING_USD` default for one workspace. Null means "use the default", not
+  "unlimited".
+
 ## Conventions
 
 - **UUID v4 primary keys**, `@default(uuid())`, snake_case table names via `@@map`.

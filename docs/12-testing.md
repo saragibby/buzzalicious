@@ -81,6 +81,15 @@ read by anything.
 
 Never point `TEST_DATABASE_URL` at a database you care about.
 
+**Bind timestamps into raw SQL as UTC text, never as a `Date`.** Prisma serializes a
+raw-bound `Date` in the *process's* local zone, so a `timestamp without time zone` column
+written by `$executeRaw` lands at a different instant than the same value written through
+the query builder. W10 hit this: rollup rows sat four hours before the ledger rows they
+summarised, every lookup by period missed, and the whole thing would have been green on a
+UTC host — which CI is. Pass `date.toISOString()` and cast
+`::timestamptz AT TIME ZONE 'UTC'`, and assert against a literal instant rather than
+against the other code path, since comparing two shifted paths to each other passes.
+
 ## What to test
 
 The bar is **behaviour a future change could plausibly break**, not a coverage number.
@@ -168,17 +177,17 @@ branch to merge is fine, and the second and third are the ones exposed. So:
   `gh run list --branch <branch>`. A PR reporting `MERGEABLE` / `CLEAN` with no runs is
   the signature.
 
-## Current state (end of M2)
+## Current state (end of M3)
 
-217 tests across 19 files.
+507 tests across 49 files.
 
-Running without a database, 193 of them: crypto round-trip and tamper detection, the
+Running without a database, 424 of them: crypto round-trip and tamper detection, the
 Prisma encryption extension against a mock, config validation, the storage driver and its
 signed URLs, local-to-UTC time conversion across DST, the HTTP error boundary and app
 smoke tests, the AI prompt and parse layer, every JSON column's Zod contract, and the
 frontend auth guard and API client.
 
-With `TEST_DATABASE_URL` set, 24 more in `backend/tests/db/`:
+With `TEST_DATABASE_URL` set, 83 more in `backend/tests/db/`:
 
 - **`encryption.test.ts`** — that the stored column is ciphertext, asserted with
   `$queryRaw` against the raw value. A round-trip through our own codec passes even when
@@ -192,3 +201,20 @@ With `TEST_DATABASE_URL` set, 24 more in `backend/tests/db/`:
   credentials, all eight send-time slots covered per brand with genuinely different
   shapes, text posts with zero renditions, a schedule that crosses a DST boundary, and
   `PostMetric.linkClicks` agreeing with the `LinkClick` rows it was derived from.
+- **`usage.test.ts`** — the W10 meter. Idempotency under retry, concurrent emits of the
+  same metric not losing an increment, the rollup agreeing with a rebuild from the ledger,
+  a rebuild repairing deliberately corrupted drift, the AI ceiling refusing generation
+  while still allowing a publish, and the raw rollup insert binding `periodStart` as UTC.
+  Every claim here is trivially satisfiable by a vacuous test, so each is paired with a
+  control that must move the same number — see the file header. Also the brand-scope
+  tenancy case: a `ScopeRule` returning `{}` is *no filter*, not a deny, so that test
+  asserts on **which** workspaces come back rather than on a count, with the other
+  workspace's rows guaranteed present at the time of the read.
+- **`usage-admin-serialization.test.ts`** — that the admin response actually serializes.
+  `quantity` is a `BigInt` and `JSON.stringify` throws on one, so a field later returned
+  straight from Prisma would fail at runtime, only on a populated database. Real read
+  layer, real `res.json`, only the two auth layers mocked.
+- **`trend-mapping-budget.test.ts`** — that `classifyWithLlm` rethrows
+  `BudgetExceededError` but still degrades to rule matches on a provider failure. Both
+  halves, because a service that rethrows everything passes the first alone and a service
+  that swallows everything passes the second alone.

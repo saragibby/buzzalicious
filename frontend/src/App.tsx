@@ -7,6 +7,7 @@ import { BrandKit } from './routes/BrandKit';
 import { Login } from './routes/Login';
 import { TrendFeed } from './routes/trends/TrendFeed';
 import { TrendCurate } from './routes/trends/TrendCurate';
+import { UsageAdmin } from './routes/admin/UsageAdmin';
 import { Calendar, Composer, Dashboard, Insights, NotFound, Settings } from './routes/Placeholder';
 
 /**
@@ -49,6 +50,10 @@ export function App() {
             {/* W9 */}
             <Route path="trends" element={<TrendFeed />} />
             <Route path="trends/curate" element={<TrendCurate />} />
+            {/* W10. Not in the nav: it is a platform-admin surface, gated server-side by
+                PLATFORM_ADMIN_EMAILS, and a link everyone can see but nobody can open is
+                worse than no link. */}
+            <Route path="admin/usage" element={<UsageAdmin />} />
             <Route path="composer" element={<Composer />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="insights" element={<Insights />} />

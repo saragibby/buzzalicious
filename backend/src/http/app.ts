@@ -14,6 +14,7 @@ import { createFilesRouter, shouldMountFilesRouter } from './routes/files.routes
 import { createTemplatesRouter } from './routes/templates.routes';
 import { createTrendRouter } from './routes/trend.routes';
 import { createTrendAdminRouter } from './routes/trend-admin.routes';
+import { createUsageAdminRouter } from './routes/usage-admin.routes';
 import { createWorkspaceRouter } from './routes/workspace.routes';
 
 /**
@@ -86,6 +87,7 @@ export function createApp(): Application {
   // gated separately by TREND_ADMIN_EMAILS inside its own router.
   app.use('/api/trends', createTrendRouter());
   app.use('/api/admin/trends', createTrendAdminRouter());
+  app.use('/api/admin/usage', createUsageAdminRouter());
 
   if (shouldMountFilesRouter()) {
     app.use('/api/files', createFilesRouter());

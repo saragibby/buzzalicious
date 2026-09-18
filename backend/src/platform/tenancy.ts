@@ -111,6 +111,28 @@ export const TENANT_MODELS = {
     brand: (brandId) => ({ credential: { OR: [{ brandId }, { brandId: null }] } }),
     workspace: (workspaceId) => ({ credential: { workspaceId } }),
   },
+
+  // The usage meter (ADR-0011). Workspace-owned: the workspace is the billing entity, so
+  // an unscoped read here would show one client another's spend. `UsageEvent.brandId` is
+  // nullable because platform-global work has no brand, which makes it the same shape as
+  // AiGeneration above — a null-brand row is deliberately invisible to a brand-scoped read.
+  //
+  // Emitting from system work (a job, a curation run) goes through the unscoped client, as
+  // the UnscopedTenantAccessError message says it should; `emitUsage` binds the workspace
+  // explicitly from its input either way.
+  UsageEvent: {
+    brand: (brandId) => ({ brandId }),
+    workspace: (workspaceId) => ({ workspaceId }),
+    createField: { field: 'workspaceId', from: 'workspaceId' },
+  },
+  // Rollups are workspace-level, never brand-level. Under a brand scope the constraint is
+  // still the owning workspace, reached through the brand — an empty fragment here would
+  // AND to nothing and show one client every other client's spend.
+  UsagePeriodRollup: {
+    brand: (brandId) => ({ workspace: { brands: { some: { id: brandId } } } }),
+    workspace: (workspaceId) => ({ workspaceId }),
+    createField: { field: 'workspaceId', from: 'workspaceId' },
+  },
 } as const satisfies Record<string, ScopeRule>;
 
 export type TenantModel = keyof typeof TENANT_MODELS;

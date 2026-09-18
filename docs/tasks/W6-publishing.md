@@ -64,6 +64,15 @@ partial-failure handling.
 - **`connect()` returns an array.** One Meta authorization can yield several destinations.
 - **Typed errors.** Distinguish credential-level from account-level failures: one client
   action can fix many broken accounts at once.
+- **The AI spend ceiling must never gate delivery.** W10's fuse
+  ([ADR-0011](../adr/0011-usage-metering-spine.md)) refuses *generation* when a workspace is
+  over its monthly AI budget. A post that already exists has already been paid for, so a
+  publish job must not consult the budget — do not call `assertAiBudgetAvailable` anywhere
+  in the publish path, and do not let a `BudgetExceededError` from an unrelated layer fail a
+  target. Emit `POST_PUBLISHED` through `emitUsage` with an **attempt-independent**
+  idempotency key (`publish:{postTargetId}`, never `:{attempt}`) so a retry that finally
+  succeeds counts as one billable post. W10 could only test this as a seam because W6 did
+  not exist; this is the line that makes it real.
 
 ## Acceptance criteria
 
@@ -79,6 +88,8 @@ partial-failure handling.
       `REVOKED`
 - [ ] Revoking a credential halts its jobs and marks dependent accounts
 - [ ] Meta adapters are complete and tested against faked responses
+- [ ] A scheduled post for a workspace **over its AI ceiling** still publishes, end to end —
+      the case W10 could only assert at the seam
 
 ## Notes
 
