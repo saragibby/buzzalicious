@@ -153,9 +153,7 @@ describe('LivePreview', () => {
     // The overflow list below is the assertion that makes the state reset load-bearing,
     // because it renders off `preview` without consulting `error`.
     expect(container.querySelector('.composer-preview-svg')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('list', { name: 'Text that does not fit' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Text that does not fit' })).not.toBeInTheDocument();
   });
 
   it('surfaces a network failure in words the user can act on', async () => {
