@@ -350,6 +350,92 @@ With `TEST_DATABASE_URL` set, 105 more in `backend/tests/db/`:
   connections read, and — asserted on the serialized body rather than the object — that no
   token reaches the response.
 
+## The four ways a test passes for the wrong reason
+
+Fourteen instances across the workstreams so far, and they are not fourteen different
+mistakes. They are four, and each has a tell. **Run this checklist against every new
+assertion:**
+
+1. **Didn't run.** Would this be green if the code under test were never reached?
+2. **Absorbed downstream.** Is a correct guard further down deciding the outcome, so a
+   wrong value upstream never surfaces?
+3. **Couldn't have failed.** Is the expected value a fixed point — the identity, the
+   prior, or the default?
+4. **Red proves nothing yet.** When I mutated it and it went red, did it fail the
+   *assertion*, or did it fail to *build*?
+
+The sections below are the worked examples. Each was paid for.
+
+### 1. Didn't run (vacuous)
+
+Tell: **a file that fails to load reports zero tests AND zero failures.** See "The failure
+that looks exactly like a pass" below.
+
+The other shape is a guard with no assertions at all. W5's tenant-scope test removed
+`withTenantScope` from every write and stayed 21/21 green — because removing scope grants
+*more* access, and the cross-workspace test passes identically either way. A negative test
+whose negative is also produced by the bug is not a test.
+
+### 2. Absorbed downstream (masking)
+
+*A correct guard downstream conceals an incorrect input upstream.* Hit three times now.
+
+The detection rule: **mutating an input is only meaningful in the window where the
+downstream filter is not already deciding the outcome.**
+
+Worked example. A send-time search that starts from the wrong date is invisible, because
+`instant >= from` filters the bad candidates out anyway — *except* in the sliver where the
+local and UTC dates disagree. The fixture has to sit in that sliver (Denver at
+`2026-03-08T00:00:00Z`) or the mutation is silently absorbed.
+
+W8's instance: a fixture used the `proven` candidate to test the "well-measured candidate"
+guard — but `proven` is the *exploit* pick and is therefore already removed by `taken`
+before the guard is reached. The mutation survived, correctly.
+
+### 3. Couldn't have failed (fixed point)
+
+**Suspect a fixed point wherever an expected value is a round number that also happens to
+be the identity, the prior, or the default.** Check by re-running the assertion at an
+extreme parameter value — `k = 0`, or `k = 50`. If the number does not move, the test is
+not measuring the transformation.
+
+W8's cadence test asserted band 8 scored `8.00`. It does — at every `k`, including `k = 0`,
+because `8 × 1.0 = 8` is a fixed point of the shrinkage it was meant to be testing.
+
+And the trap one layer down, when you build a fixture to escape a fixed point: **check
+that the statistic you are scaling is not computed from the thing you are scaling.** The
+fix above wanted "eight posts at 1.2× typical", which is unconstructible — band 8 holds
+32 of 34 posts and therefore *defines* the median. Uniform scaling cancels; only skew
+survives.
+
+### 4. Red proves nothing until you know what red means
+
+Two halves, one from each side of the W8 review.
+
+**A mutant must fail the assertion, not the module.** Tell: the mutant introduces an
+identifier the file does not import, so it dies on a `ReferenceError` before a single
+assertion is evaluated. The harness records a kill and nothing was tested.
+
+**A harness must assert a green baseline before its first mutation.** Tell: identical
+failure signatures across unrelated mutations. A review harness reported 4/4 killed with
+byte-identical `76 failed | 24 passed` output, because `npx vitest run --root backend`
+bypasses `vitest.workspace.ts` and therefore `setupFiles`, so `getConfig()` threw at import
+and the baseline was already red. **Use `npm test -- <path>`, never `npx vitest run`.**
+
+W8's harness now asserts a green baseline, records the *set* of failing tests per mutation,
+and rejects two different mutations that produce the identical set — a broad-but-real
+mutation may break many tests, but two different mutations breaking exactly the same set
+cannot both be precise.
+
+### And always include a positive control
+
+A guard that is tautologically silent passes every "it stayed silent" test. Assert that it
+*does* fire when it should, in the same file, or the silence assertions mean nothing.
+
+W7's headline test asserts it *does* name a winner when scores are comparable. W8's
+exploration tests assert a genuine user choice *is* counted, alongside the assertion that
+an exploration post is not — otherwise the test would pass if everything were excluded.
+
 ## The failure that looks exactly like a pass
 
 Worth repeating because it happened again in W6 PR 2. A test file that fails to *load*
