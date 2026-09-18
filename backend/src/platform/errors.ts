@@ -12,7 +12,7 @@
  * body, ever.
  */
 
-import { ZodError } from 'zod';
+import { ZodError, type ZodIssue } from 'zod';
 
 export type ErrorCode =
   | 'VALIDATION_FAILED'
@@ -173,9 +173,36 @@ export function statusFor(error: unknown): number {
  * one forgotten `catch` away from reintroducing it.
  *
  * The issue list is safe to expose. Zod reports the shape of what the client itself
- * sent — a path and a reason — and never server state. `details` deliberately carries no
- * received values, only paths, so an echoed secret cannot ride back out in an error body.
+ * sent — a path and a reason — and never server state.
+ *
+ * With one sharp exception, which is why `safeMessage` exists. Most Zod issues describe
+ * the *expectation* ("Expected string, received number" names the type, not the value),
+ * but `invalid_enum_value` and `invalid_literal` interpolate the **submitted value** into
+ * their prose: `... received 'super-secret-token'`. Forwarding those verbatim would echo
+ * a rejected value straight back out in an error body, and docs/10 is absolute that a
+ * credential secret is never returned, "not even to the client that sent it". Transposing
+ * a secret into the wrong field is exactly the kind of client bug that then fails
+ * validation, so this is reachable rather than theoretical.
+ *
+ * For those kinds the message is rebuilt from what *we* declared. `received` is never
+ * forwarded at all.
  */
+
+/** Issue kinds whose `message` interpolates the value the client sent. */
+const VALUE_BEARING_CODES = new Set(['invalid_enum_value', 'invalid_literal']);
+
+function safeMessage(issue: ZodIssue): string {
+  if (!VALUE_BEARING_CODES.has(issue.code)) return issue.message;
+
+  if (issue.code === 'invalid_enum_value') {
+    // `options` are the values this API declares, so disclosing them is intentional — it
+    // is the same information as the API docs, and it is what makes the error actionable.
+    return `Expected one of: ${issue.options.map((option) => String(option)).join(', ')}.`;
+  }
+
+  return 'That value is not one this field accepts.';
+}
+
 export function normalizeError(error: unknown): unknown {
   if (!(error instanceof ZodError)) return error;
 
@@ -184,7 +211,11 @@ export function normalizeError(error: unknown): unknown {
     details: {
       issues: error.issues.map((issue) => ({
         path: issue.path.join('.'),
-        message: issue.message,
+        // Exposed so a client can branch on the kind of failure — in particular
+        // `unrecognized_keys`, which is a misspelled or renamed field rather than a bad
+        // value, and needs a different fix.
+        code: issue.code,
+        message: safeMessage(issue),
       })),
     },
   });

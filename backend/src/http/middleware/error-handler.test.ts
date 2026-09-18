@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   AuthError,
   ExternalServiceError,
@@ -86,6 +87,82 @@ describe('errorHandler', () => {
       expect(response.body.error).toHaveProperty('code');
       expect(response.body.error).toHaveProperty('message');
     }
+  });
+});
+
+/**
+ * A `ZodError` is what every router throws for a malformed body, and it is not an
+ * `AppError` — so before this it fell through to the generic branch and became a **500
+ * logged at error level**. That is wrong in three ways at once: it blames the server for
+ * the client's mistake, tells the client nothing it can act on, and buries genuine faults
+ * under noise from ordinary bad input.
+ *
+ * This is deliberately tested at the boundary rather than per-route, because the boundary
+ * is what makes it true for all nine routers that call `Schema.parse`.
+ */
+describe('errorHandler and schema validation', () => {
+  const schema = z.object({ title: z.string() }).strict();
+
+  it('turns a rejected body into a 400 that names the offending field', async () => {
+    const response = await request(appThrowing(schema.safeParse({ title: 1 }).error)).get('/boom');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+
+    // Naming the path is the point. A 400 saying only "invalid" leaves the client
+    // guessing, which in practice means a support ticket.
+    expect(response.body.error.details.issues[0]).toMatchObject({ path: 'title' });
+  });
+
+  it('reports an unknown key as unrecognized rather than swallowing it', async () => {
+    const response = await request(
+      appThrowing(schema.safeParse({ title: 'ok', ttile: 'typo' }).error),
+    ).get('/boom');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details.issues[0].code).toBe('unrecognized_keys');
+    expect(JSON.stringify(response.body.error.details)).toContain('ttile');
+  });
+
+  it('still returns an opaque 500 for a genuine server fault', async () => {
+    // The control that keeps the conversion honest: it must catch Zod specifically, not
+    // downgrade every unrecognised error to a 400 and hide real faults from the logs.
+    const response = await request(appThrowing(new TypeError('cannot read x of undefined'))).get(
+      '/boom',
+    );
+
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(response.body)).not.toContain('cannot read x');
+  });
+
+  it('never echoes the rejected value back, only the path and the reason', async () => {
+    // `details` is returned to the client, so this conversion is an exposure path that did
+    // not exist before. docs/10 is absolute that a credential secret is never returned
+    // "not even to the client that sent it" — and a body carrying one can certainly fail
+    // validation.
+    //
+    // Deliberately exercised through an **enum** field. Most Zod issues (`too_big`,
+    // `invalid_type`) never carry the offending value at all, so a test built on one of
+    // those passes no matter what this code maps — it asserts a property of Zod, not of
+    // us. `invalid_enum_value` is one of the few kinds that does carry the raw value, so
+    // it is the only shape that can actually catch us forwarding `received`.
+    const withEnum = z.object({ mode: z.enum(['CLIENT_APP', 'DIRECT_TOKEN']) }).strict();
+    const response = await request(
+      appThrowing(withEnum.safeParse({ mode: 'super-secret-token' }).error),
+    ).get('/boom');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details.issues[0]).toMatchObject({
+      path: 'mode',
+      code: 'invalid_enum_value',
+    });
+
+    // Positive control: Zod really did capture the value, so the absence below is this
+    // code dropping it rather than Zod never having had it.
+    const raw = withEnum.safeParse({ mode: 'super-secret-token' });
+    expect(JSON.stringify(raw.error?.issues)).toContain('super-secret-token');
+
+    expect(JSON.stringify(response.body)).not.toContain('super-secret-token');
   });
 });
 

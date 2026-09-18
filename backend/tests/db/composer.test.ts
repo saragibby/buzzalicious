@@ -446,6 +446,52 @@ describe.skipIf(!hasTestDatabase)('composer backend', () => {
         .expect(204);
     });
 
+    /**
+     * The end-to-end half of `post.schemas.test.ts`.
+     *
+     * Every field on a draft update is optional, so a misspelled key parses to an empty
+     * object and writes nothing. Without `.strict()` this route would answer **200 with
+     * the user's edit silently dropped** — a failure that presents as success, which is
+     * the defect class that has bitten this repo repeatedly.
+     *
+     * TypeScript already catches this for in-process callers, but it cannot see JSON
+     * arriving from a browser, a stale tab, or a renamed field in a future client. This
+     * asserts the wire behaviour, which is the only one those clients experience.
+     */
+    it('rejects a misspelled field instead of accepting it and writing nothing', async () => {
+      const client = await signedIn(RISE.ownerId);
+      const created = await client
+        .post(`/api/brands/${RISE.brandId}/posts`)
+        .send({ templateSlug: 'big-number' })
+        .expect(201);
+
+      const postId = created.body.draft.id;
+      const platform = created.body.draft.targets[0]?.platform;
+      expect(platform).toBeDefined();
+
+      // Positive control: the correctly-spelled field is accepted and does write.
+      await client
+        .patch(`/api/brands/${RISE.brandId}/posts/${postId}`)
+        .send({ captionOverrides: { [platform]: 'written' } })
+        .expect(200);
+
+      // `captions` instead of `captionOverrides` — the actual typo that prompted this.
+      await client
+        .patch(`/api/brands/${RISE.brandId}/posts/${postId}`)
+        .send({ captions: { [platform]: 'dropped' } })
+        .expect(400);
+
+      // The decisive assertion: the earlier value is still there. A 400 alone would not
+      // rule out a partial write, and asserting only the status would miss it.
+      const after = await client.get(`/api/brands/${RISE.brandId}/posts/${postId}`).expect(200);
+      const target = after.body.draft.targets.find(
+        (t: { platform: string }) => t.platform === platform,
+      );
+      expect(target.caption).toBe('written');
+
+      await client.delete(`/api/brands/${RISE.brandId}/posts/${postId}`).expect(204);
+    });
+
     it('returns a JSON error, not zip bytes, when the post is not ready', async () => {
       const client = await signedIn(RISE.ownerId);
       const created = await client
