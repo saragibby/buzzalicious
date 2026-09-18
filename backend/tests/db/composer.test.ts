@@ -270,9 +270,13 @@ describe.skipIf(!hasTestDatabase)('composer backend', () => {
 
       // Refused *before* anything is written. A partially-written zip that looks like a
       // successful download is worse than an error.
-      await expect(streamExportBundle(rise, db, draft.id, sink)).rejects.toBeInstanceOf(
-        ValidationError,
-      );
+      //
+      // The message is asserted, not just the error class: without the readiness check
+      // the render itself also throws a `ValidationError` — for missing slot values —
+      // so `rejects.toBeInstanceOf(ValidationError)` alone passed with the check
+      // disabled. That is the difference between testing readiness and testing that
+      // *something* went wrong.
+      await expect(streamExportBundle(rise, db, draft.id, sink)).rejects.toThrow(/not ready/i);
       expect(sink.buffer).toHaveLength(0);
 
       await deleteDraft(rise, draft.id);
