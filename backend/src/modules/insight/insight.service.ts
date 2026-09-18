@@ -1,4 +1,4 @@
-import type { Platform } from '@prisma/client';
+import type { Platform, ScheduleSource } from '@prisma/client';
 import type { ScopedDb } from '../../platform/tenancy';
 import {
   clicksAreMeasurable,
@@ -52,6 +52,26 @@ export interface TargetOutcome {
   /** Carried so the UI can name a template without a second round trip. */
   templateName: string | null;
   trendId: string | null;
+  /**
+   * Added for W8. The recommender groups by brand and by archetype, and tags exploration
+   * posts so the loop cannot read its own suggestions as user preference.
+   *
+   * Selected here rather than in a second query in `modules/recommend/` so that the
+   * latest-snapshot rule and `clicksAreMeasurable` have exactly one implementation. A
+   * second copy would be correct the day it was written and would drift silently, since
+   * both would keep returning plausible numbers.
+   */
+  brandId: string;
+  /** `Template.archetype`. `null` for a post written without a template. */
+  archetype: string | null;
+  /** Who chose the time. `EXPLORATION` and `SUGGESTED` are ours, `USER` is the signal. */
+  scheduleSource: ScheduleSource;
+  /** The learned slot key, e.g. `weekday:midday`. `null` if never scheduled into one. */
+  scheduleSlot: string | null;
+  /** Local wall-clock intent, e.g. `2026-03-08T09:00`. The DST-stable half of a schedule. */
+  scheduledLocal: string | null;
+  /** IANA zone the local time was expressed in. Never an offset. */
+  scheduledTz: string | null;
   /** `null` where the platform cannot carry a tracked link — not "no clicks". */
   linkClicks: number | null;
   impressions: number | null;
@@ -93,10 +113,15 @@ export async function targetOutcomes(db: ScopedDb, window: ClickWindow): Promise
       post: {
         select: {
           id: true,
+          brandId: true,
           title: true,
           templateId: true,
           trendId: true,
-          template: { select: { name: true } },
+          scheduleSource: true,
+          scheduleSlot: true,
+          scheduledLocal: true,
+          scheduledTz: true,
+          template: { select: { name: true, archetype: true } },
         },
       },
       metrics: {
@@ -139,6 +164,12 @@ export async function targetOutcomes(db: ScopedDb, window: ClickWindow): Promise
       templateId: target.post.templateId,
       templateName: target.post.template?.name ?? null,
       trendId: target.post.trendId,
+      brandId: target.post.brandId,
+      archetype: target.post.template?.archetype ?? null,
+      scheduleSource: target.post.scheduleSource,
+      scheduleSlot: target.post.scheduleSlot,
+      scheduledLocal: target.post.scheduledLocal,
+      scheduledTz: target.post.scheduledTz,
       linkClicks,
       ...metrics,
       capturedAt: latest?.capturedAt ?? null,
