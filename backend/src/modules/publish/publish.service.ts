@@ -10,6 +10,10 @@ import { PlatformMetaSchema } from './credential.schemas';
 import { CredentialUnavailableError, resolveCredential } from './credential.resolver';
 import { isPlatformError, type PlatformError } from './publish.errors';
 import { emitUsage } from '../usage/usage.service';
+import { effectiveCaption } from './caption-gate';
+import { hasLinkPlaceholder, substituteLink } from '../link/link-injection';
+import { getOrCreateShortLink, shortLinkUrl } from '../link/shortlink.service';
+import { isSupportedPlatform } from '../template/platform-spec';
 
 /**
  * The publish pipeline: one attempt at one `PostTarget`.
@@ -71,7 +75,7 @@ export async function publishTarget(
   const target = await db.postTarget.findUnique({
     where: { id: options.targetId },
     include: {
-      post: { include: { brand: { select: { id: true, workspaceId: true } } } },
+      post: { include: { brand: { select: { id: true, workspaceId: true, website: true } } } },
       socialAccount: true,
       rendition: true,
     },
@@ -146,8 +150,62 @@ export async function publishTarget(
   }
 }
 
+/**
+ * The exact text this target will publish, tracked link and all.
+ *
+ * ## Inheritance, not coalescing
+ *
+ * `effectiveCaption` rather than `target.caption ?? ''`. W5's semantics are that a `null`
+ * override means "inherit the base copy" and `''` means "the user deliberately cleared
+ * this platform's caption" — so `?? ''` publishes an **empty post** for every target the
+ * user never gave a per-platform override, which is the common case for a draft written
+ * once and sent everywhere.
+ *
+ * ## One link per (post, platform)
+ *
+ * The short link is created here, at the moment of publication, because that is the first
+ * point at which the pairing is certain. `getOrCreateShortLink` is idempotent, so a retry
+ * reuses the same slug rather than splitting the post's click stream.
+ *
+ * ## The marker never ships
+ *
+ * If the brand has no website there is nothing to point a link at, and the marker is
+ * stripped rather than left in place. `{{link}}` appearing verbatim in a live post is the
+ * worst available outcome — visible to the audience, and permanent. The schedule-time
+ * gate refuses this case with an explanation, so reaching here means a post that bypassed
+ * it; this is the backstop, not the primary check.
+ */
+async function resolveCaption(
+  target: PostTarget & {
+    post: { baseCopy: string | null; brand: { id: string; website: string | null } };
+  },
+): Promise<string> {
+  const caption = effectiveCaption(target.caption, target.post.baseCopy);
+
+  if (!isSupportedPlatform(target.platform)) return caption;
+  if (!hasLinkPlaceholder(caption)) return caption;
+
+  const website = target.post.brand.website;
+  if (!website) {
+    return substituteLink(target.platform, caption, '');
+  }
+
+  // Instagram gets a ShortLink but no injected URL: the row has to exist for clicks that
+  // arrive through the profile link, and `substituteLink` removes the marker rather than
+  // spending caption budget on a URL Instagram will never linkify.
+  const link = await getOrCreateShortLink({
+    brandId: target.post.brand.id,
+    postId: target.postId,
+    platform: target.platform,
+    destinationUrl: website,
+  });
+
+  return substituteLink(target.platform, caption, shortLinkUrl(link.slug));
+}
+
 async function buildPublishInput(
   target: PostTarget & {
+    post: { baseCopy: string | null; brand: { id: string; website: string | null } };
     rendition: {
       storageKey: string;
       mimeType: string;
@@ -204,7 +262,7 @@ async function buildPublishInput(
       },
       platformMeta: platformMeta.success ? platformMeta.data : {},
     },
-    caption: target.caption ?? '',
+    caption: await resolveCaption(target),
     media,
     // Attempt-independent by construction. The same string is the usage idempotency key,
     // which is what makes "published after three retries" bill once.

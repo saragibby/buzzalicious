@@ -6,7 +6,8 @@ import { NotFoundError, ValidationError } from '../../platform/errors';
 import { getLogger } from '../../platform/logger';
 import type { ScopedDb } from '../../platform/tenancy';
 import { renderPost } from '../render/render.service';
-import { PLATFORM_SPECS, measureCaption, type SupportedPlatform } from '../template/platform-spec';
+import { PLATFORM_SPECS, type SupportedPlatform } from '../template/platform-spec';
+import { measureWithLink } from '../link/link-injection';
 import { LINK_MARKER } from './post.schemas';
 import { draftReadiness, getDraft, type DraftView } from './post.service';
 
@@ -67,7 +68,7 @@ export function buildCaptionsFile(draft: DraftView): string {
   const sections = draft.targets.map((target) => {
     const spec = PLATFORM_SPECS[target.platform];
     const caption = captionFor(draft, target.platform);
-    const count = measureCaption(target.platform, caption);
+    const count = measureWithLink(target.platform, caption);
 
     return [
       `## ${spec.label}`,

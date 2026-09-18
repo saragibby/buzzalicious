@@ -1727,3 +1727,125 @@ button:hover {
 .conn-ok {
   color: #166534;
 }
+
+/* --- Insights (W7) ------------------------------------------------------- */
+
+.insight-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.insight-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.insight-windows {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.insight-windows button {
+  background: none;
+  border: 1px solid var(--border, #d4d4d8);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.insight-windows button.is-selected {
+  background: var(--accent-soft, #eef2ff);
+  border-color: var(--accent, #4f46e5);
+}
+
+.insight-headline {
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: var(--accent-soft, #eef2ff);
+}
+
+.insight-headline p {
+  margin: 0;
+}
+
+.insight-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.insight-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.insight-table th,
+.insight-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border, #e4e4e7);
+}
+
+/* The distinction the whole module exists to preserve: an unavailable metric is muted
+   and dashed, never a confident zero. */
+.insight-muted {
+  color: var(--muted, #71717a);
+  font-size: 0.85em;
+}
+
+.insight-flag {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--warn-soft, #fef3c7);
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.insight-empty {
+  color: var(--muted, #71717a);
+}
+
+.insight-error {
+  color: var(--danger, #b91c1c);
+}
+
+.insight-posts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.insight-post-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1rem;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.insight-post-meta {
+  color: var(--muted, #71717a);
+  font-size: 0.9em;
+}
+
+.insight-timeline {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.9em;
+}

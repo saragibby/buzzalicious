@@ -47,14 +47,6 @@ export const Calendar = () => (
   />
 );
 
-export const Insights = () => (
-  <Placeholder
-    title="Insights"
-    workstream="W8"
-    description="How published posts actually performed, collected back from each platform."
-  />
-);
-
 export const Settings = () => (
   <Placeholder
     title="Settings"

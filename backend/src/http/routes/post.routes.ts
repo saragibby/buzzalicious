@@ -21,6 +21,7 @@ import {
 } from '../../modules/post/post.service';
 import { PLATFORM_SPECS } from '../../modules/template/platform-spec';
 import { requireAuth } from '../middleware/require-auth';
+import { LINK_MARKER, syntheticLink } from '../../modules/link/link-injection';
 import { brandOf, requireBrand } from '../middleware/require-scope';
 
 /**
@@ -189,7 +190,16 @@ export function createPlatformRouter(): Router {
   router.use(requireAuth);
 
   router.get('/', (_req, res) => {
-    res.json({ platforms: Object.values(PLATFORM_SPECS) });
+    // `linkPreview` exists so the browser-side counter can substitute exactly what the
+    // server will. The composer measures a caption containing `{{link}}` by replacing it
+    // with `syntheticUrl` first — the same stand-in `measureWithLink` uses — because a
+    // counter that measures the placeholder measures a string that is never published.
+    // On X in particular the two differ by a lot: `{{link}}` is 8 characters and a URL
+    // bills a flat 23, so a caption the composer said fit would be rejected at publish.
+    res.json({
+      platforms: Object.values(PLATFORM_SPECS),
+      linkPreview: { marker: LINK_MARKER, syntheticUrl: syntheticLink() },
+    });
   });
 
   return router;

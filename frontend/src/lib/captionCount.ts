@@ -105,6 +105,68 @@ export function measureCaption(spec: PlatformSpec, text: string): CaptionCount {
   };
 }
 
+/**
+ * What the server will substitute for `{{link}}`, served by `GET /api/platforms`.
+ *
+ * Hard-coding either half here would reintroduce exactly the drift this whole module is
+ * built to avoid: the marker is W5's constant and the synthetic URL's length depends on
+ * `LINK_BASE_URL`, which is deployment configuration.
+ */
+export interface LinkPreview {
+  marker: string;
+  syntheticUrl: string;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Replace the link placeholder the way publishing will.
+ *
+ * Mirrors `substituteLink` in `backend/src/modules/link/link-injection.ts`, including the
+ * whitespace tidy-up on a platform that strips the marker rather than replacing it —
+ * otherwise a removed mid-sentence placeholder leaves a double space and the two counts
+ * differ by one.
+ */
+export function substituteLinkForCount(
+  spec: PlatformSpec,
+  text: string,
+  preview: LinkPreview,
+): string {
+  const pattern = new RegExp(escapeRegExp(preview.marker), 'g');
+
+  if (spec.linkBehavior === 'bio-only') {
+    return text
+      .replace(pattern, '')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/[ \t]+$/gm, '')
+      .trim();
+  }
+
+  return text.replace(pattern, preview.syntheticUrl);
+}
+
+/**
+ * Measure a caption as it will be *after* the link goes in.
+ *
+ * The composer must call this rather than `measureCaption` whenever a link preview is
+ * available. Measuring the raw placeholder is the composer-previews-what-publish-rejects
+ * bug: `{{link}}` is far shorter than the URL that replaces it, so a caption can pass here
+ * and fail the server's gate.
+ *
+ * `preview` is optional because the specs arrive over the network and the counter has to
+ * render before they do. With no preview this degrades to the old behaviour rather than
+ * guessing a URL length.
+ */
+export function measureCaptionWithLink(
+  spec: PlatformSpec,
+  text: string,
+  preview: LinkPreview | null,
+): CaptionCount {
+  return measureCaption(spec, preview ? substituteLinkForCount(spec, text, preview) : text);
+}
+
 /** How many URLs a caption contains, for platforms that cap them (Threads: 5). */
 export function countLinks(text: string): number {
   return text.match(URL_PATTERN)?.length ?? 0;

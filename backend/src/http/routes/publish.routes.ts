@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getPrisma } from '../../platform/db';
 import { NotFoundError, ValidationError } from '../../platform/errors';
+import { assertCaptionsFit } from '../../modules/publish/caption-gate';
 import { requireAuth } from '../middleware/require-auth';
 import { requireBrand, brandOf } from '../middleware/require-scope';
 import { cancelTargets, scheduleTargets } from '../../modules/publish/schedule.service';
@@ -88,6 +89,12 @@ export function createPublishRouter(): Router {
       const { targetIds } = TargetIdsSchema.parse(req.body);
       await assertOwned(db, targetIds);
 
+      // W7. Immediate publish bypassed the caption gate entirely: only `scheduleTargets()`
+      // called it, so "publish now" would accept an over-length caption and fail inside
+      // the job — to a status nobody is watching, which is the exact failure the gate was
+      // introduced to prevent. Scheduling and publishing must apply the same rule.
+      await assertCaptionsFit(db, targetIds);
+
       // Mark them scheduled-now first, so the sweep is a safety net if the enqueue itself
       // is lost. A queue send that fails after a 202 would otherwise strand the post in a
       // state nothing ever retries.
@@ -117,6 +124,7 @@ export function createPublishRouter(): Router {
       const { db } = brandOf(req);
       const targetId = req.params.targetId!;
       await assertOwned(db, [targetId]);
+      await assertCaptionsFit(db, [targetId]);
 
       // Synchronous, single target, ADMIN only. This exists for support and for the
       // "it failed, try it again while I watch" case, where the whole value is seeing the

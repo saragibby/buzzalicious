@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { countCaption, countLinks, measureCaption } from './captionCount';
+import {
+  countCaption,
+  countLinks,
+  measureCaption,
+  measureCaptionWithLink,
+  substituteLinkForCount,
+} from './captionCount';
 import type { PlatformSpec } from './composerApi';
 
 /**
@@ -145,5 +151,81 @@ describe('countLinks', () => {
 
   it('finds no links in ordinary text', () => {
     expect(countLinks('no links here, just example.com talk')).toBe(0);
+  });
+});
+
+describe('measuring a caption that will have a link injected', () => {
+  // Mirrors what `GET /api/platforms` serves: the real marker and a stand-in URL of the
+  // real length. `backend/src/modules/link/link-injection.test.ts` pins the server side
+  // against the same shapes.
+  const preview = { marker: '{{link}}', syntheticUrl: 'https://bzz.to/aaaaaaa' };
+
+  // `linkBehavior: 'inline'` is set explicitly on every X fixture below. The shared
+  // `spec()` helper defaults to Instagram, which is `bio-only` — inheriting that made the
+  // first draft of these tests strip the marker instead of injecting a URL, and two of
+  // them passed for entirely the wrong reason.
+  const xSpec = () =>
+    spec({
+      platform: 'X',
+      captionMaxLength: 280,
+      captionCountUnit: 'x-weighted',
+      linkBehavior: 'inline',
+    });
+
+  it('bills the injected URL, not the placeholder', () => {
+    const x = xSpec();
+    const caption = `Read more: ${preview.marker}`;
+
+    // "Read more: " is 11, and X charges a flat 23 for any URL. Counting the raw
+    // placeholder would give 19 — under the truth, which is the direction that lets a
+    // caption pass the composer and be rejected at publish.
+    expect(measureCaptionWithLink(x, caption, preview).used).toBe(34);
+    expect(measureCaption(x, caption).used).toBe(19);
+  });
+
+  it('lets an injected link push a caption over the limit', () => {
+    const x = { ...xSpec(), captionMaxLength: 30 };
+    const caption = `${'a'.repeat(19)} ${preview.marker}`;
+
+    // 19 + 1 + 8 = 28 as written, 19 + 1 + 23 = 43 as published. The composer must say
+    // over, because the server's gate will.
+    expect(measureCaption(x, caption).over).toBe(false);
+    expect(measureCaptionWithLink(x, caption, preview).over).toBe(true);
+  });
+
+  it('removes the placeholder on a bio-only platform rather than charging for it', () => {
+    const instagram = spec({ platform: 'INSTAGRAM', linkBehavior: 'bio-only' });
+
+    // Instagram does not linkify caption URLs, so the server strips the marker. Charging
+    // for a URL that is never published would understate the budget the user has left.
+    expect(measureCaptionWithLink(instagram, `Beach day ${preview.marker}`, preview).used).toBe(9);
+  });
+
+  it('does not leave a double space when it strips a mid-sentence placeholder', () => {
+    const instagram = spec({ platform: 'INSTAGRAM', linkBehavior: 'bio-only' });
+
+    // 'Book' + ' ' + 'now' = 8. A naive replace leaves 'Book  now' and counts 9, which
+    // disagrees with the server by one — the kind of off-by-one that only shows up on a
+    // caption sitting exactly at the limit.
+    expect(substituteLinkForCount(instagram, `Book ${preview.marker} now`, preview)).toBe(
+      'Book now',
+    );
+  });
+
+  it('counts unchanged when the caption has no placeholder', () => {
+    const x = xSpec();
+
+    expect(measureCaptionWithLink(x, 'plain caption', preview).used).toBe(
+      measureCaption(x, 'plain caption').used,
+    );
+  });
+
+  it('falls back to a plain count before the specs have loaded', () => {
+    const x = xSpec();
+    const caption = `Read more: ${preview.marker}`;
+
+    // Degrading to the old count is the right failure: it is a known-imperfect number
+    // rather than one built from a guessed URL length.
+    expect(measureCaptionWithLink(x, caption, null).used).toBe(measureCaption(x, caption).used);
   });
 });
