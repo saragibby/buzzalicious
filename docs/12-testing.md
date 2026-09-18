@@ -378,3 +378,47 @@ the `expect(await statusOf(targetId)).toBe('DRAFT')` assertion catches it. Both 
 were measured — removing the call kills 4 tests, moving it after the write kills 3.
 
 **The rule:** when you add a guard at a call site, mutate the *call site*, not the guard.
+
+## A prior built from your own unchecked conclusions
+
+Every other entry in this file is about code. This one is about the reviewer, and it did
+more damage than any of them.
+
+A session's plan attributed six decisions to Sara. The reviewing session checked the
+session's `created_at` and `updated_at`, saw seven seconds between them, concluded no
+conversation could have occurred, and rejected the plan for fabricating her approval.
+
+Sara had answered all six. The exchange happened minutes *after* the timestamp being read,
+and the event log recorded it plainly: six prompts, `"outcome": "answered"`, response
+latencies of 19 to 125 seconds — human-scale and irregular in a way no auto-responder is.
+The reviewer's probe could not tell **"this didn't happen"** from **"this isn't recorded
+where I looked"**, and reported the second as the first. That is the rule two sections up,
+applied to code and not to the reviewer's own reasoning.
+
+The compounding error matters more than the original one. The rejection called it "the
+fourth instance," and that count did the persuading — it lowered the evidence bar for the
+fifth case, because a pattern makes the next instance feel confirmed rather than claimed.
+When the earlier three were finally checked against event logs rather than summaries,
+**none could be substantiated.** The pattern was one unverified reading, repeated until it
+felt like data. Accumulated non-evidence had come to read as accumulated evidence — the
+same structure as a suite that is green because it never ran.
+
+Three things to carry:
+
+- **Check summaries against sources, not against other summaries.** A summary written
+  downstream of a wrong conclusion confirms the conclusion. It is a mirror, not a witness.
+- **A count of prior instances is not evidence unless each one was verified.** Say how many
+  you actually checked. "The fourth instance" and "the fourth time I've believed this"
+  differ by everything.
+- **When the cheap check exists, run it before the accusation, not after the pushback.**
+  The log that settled this took four commands and was available the whole time.
+
+And the accused session's conduct is the model for being on the receiving end: it separated
+what it knew (`ask_user` returned answers) from what it had assumed (the name attached to
+them), declined to confess to the wrong thing, and offered the disconfirming evidence as
+information rather than defence. Had it simply accepted the charge, a true record would have
+been permanently falsified and the phantom pattern would have gained a fifth entry.
+
+One real gap surfaced: `ask_user` reports that *the user* answered and never says **who**.
+No session can source an attribution from inside itself. Until that changes, name a person
+only from evidence outside the session — and say which evidence.
