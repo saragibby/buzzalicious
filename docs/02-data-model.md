@@ -1,7 +1,11 @@
 # 02 — Data model
 
-> **Status:** proposed. The existing schema will be dropped entirely — there is no
-> production data. See [ADR-0001](./adr/0001-clean-foundation-reset.md).
+> **Status:** implemented in W2 (`backend/prisma/schema.prisma`, `0001_init`). The
+> prototype schema was dropped entirely — there was no production data. See
+> [ADR-0001](./adr/0001-clean-foundation-reset.md). The `prisma` blocks below are the
+> design sketches the implementation was built from; where the two differ, the schema file
+> wins and the difference is recorded under
+> [What changed during implementation](#what-changed-during-implementation-w2).
 
 ## Why the current schema can't evolve into this
 
@@ -81,6 +85,7 @@ model User {
 model Workspace {
   id          String       @id @default(uuid())
   name        String
+  slug        String       @unique
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   memberships Membership[]
@@ -162,6 +167,9 @@ model Brand {
   // Guessed from the browser at creation; always user-editable. See 06.
   timezone      String            @default("America/New_York")
 
+  // Soft delete: a brand carries posts, metrics and credentials, so removal is
+  // recoverable. Every read path filters `deletedAt: null`.
+  deletedAt     DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -353,6 +361,11 @@ model Template {
   archetype      String              // "before-after", "tip-list", "testimonial", "stat-callout"
   kind           TemplateKind @default(IMAGE)
 
+  // null = platform-global, which every v1 template is. Reserved so client-specific
+  // templates are additive rather than a migration of every row. See ADR-0010.
+  workspaceId    String?
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   // What the user must supply: named, typed slots (Zod-validated at the boundary)
   slotSchema     Json
 
@@ -495,6 +508,7 @@ model Post {
   variantGroupId  String?
   variantLabel    String?
 
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -529,6 +543,9 @@ model PostTarget {
 
   metrics         PostMetric[]
 
+  // One post publishes at most once per platform. Without this, a retry that re-creates
+  // rather than updates silently double-posts.
+  @@unique([postId, platform])
   @@index([status, scheduledFor])
   @@index([publishedAt])
   @@map("post_targets")
@@ -664,6 +681,7 @@ narrowed to its actual job.
 model AiGeneration {
   id               String   @id @default(uuid())
   brandId          String?
+  brand            Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
   postId           String?
   post             Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
   purpose          String            // "caption" | "persona-suggestion" | "hook-rewrite"
@@ -685,13 +703,107 @@ model AiGeneration {
 ## Conventions
 
 - **UUID v4 primary keys**, `@default(uuid())`, snake_case table names via `@@map`.
-- **Soft deletes only where recovery matters** (`Post`, `Brand`). Everything else deletes
-  hard via cascade.
-- **JSON columns are Zod-validated at the application boundary**, never trusted raw.
+- **Soft deletes only where recovery matters** (`Post`, `Brand`), via a nullable
+  `deletedAt`. Everything else deletes hard via cascade.
+- **JSON columns are Zod-validated at the application boundary**, never trusted raw. Each
+  schema is exported from the module that owns the entity — see
+  [JSON column contracts](#json-column-contracts).
 - **No cross-brand foreign keys.** A query that can't be scoped by `brandId` is a design
   smell.
-- **Timestamps are `DateTime` UTC.** Per-brand timezone lives on `Brand.goals` for
-  scheduling display and best-time-to-post (P1).
+- **Timestamps are `DateTime` UTC.** The per-brand IANA zone is its own column,
+  `Brand.timezone` — not a field inside `Brand.goals`. Scheduling intent is stored
+  alongside the UTC instant as `Post.scheduledLocal` + `Post.scheduledTz`; see
+  [06](./06-outcome-and-feedback-loop.md).
+
+## Encryption at rest
+
+`SocialAccount.accessToken` / `refreshToken` / `tokenSecret` and
+`PlatformCredential.appSecret` / `directToken` / `directTokenSecret` / `systemUserToken`
+are encrypted by a Prisma client extension (`backend/src/platform/prisma-encryption.ts`)
+built on `platform/crypto.ts`. Plaintext never reaches the database; reads decrypt
+transparently, including through nested `include`s.
+
+Two consequences callers must know about:
+
+- **Encrypted fields cannot be filtered, ordered, or used in a compound `where`.** AES-GCM
+  output is non-deterministic, so the same plaintext encrypts differently every time. The
+  extension throws rather than silently matching nothing.
+- **Ciphertext is versioned** (`v1.<keyId>.<iv>.<tag>.<ciphertext>`), so W6's upgrade to
+  per-workspace DEKs ([10](./10-credentials-and-security.md)) is an incremental
+  re-encryption, not a flag day.
+
+## JSON column contracts
+
+Every JSON column has an exported Zod schema colocated with the module that owns the
+entity. These are the contracts other workstreams code against; validate at the boundary
+rather than trusting a column.
+
+| Column | Schema | Module |
+|--------|--------|--------|
+| `Brand.palette` | `BrandPaletteSchema` | `modules/brand/brand.schemas.ts` |
+| `Brand.typography` | `BrandTypographySchema` | `modules/brand/brand.schemas.ts` |
+| `Brand.voiceGuide` | `BrandVoiceGuideSchema` | `modules/brand/brand.schemas.ts` |
+| `Brand.goals` | `BrandGoalsSchema` | `modules/brand/brand.schemas.ts` |
+| `PersonaLayer.modifiers` | `PersonaModifiersSchema` | `modules/brand/persona.schemas.ts` |
+| `BusinessCategory.priors` | `CategoryPriorsSchema` | `modules/brand/category.schemas.ts` |
+| `Template.slotSchema` | `SlotSchemaSchema` | `modules/template/template.schemas.ts` |
+| `Template.layout` | `TemplateLayoutSchema` | `modules/template/template.schemas.ts` |
+| `Post.slotValues` | `SlotValuesSchema` | `modules/template/template.schemas.ts` |
+| `SocialAccount.platformMeta` | `PlatformMetaSchema` | `modules/publish/credential.schemas.ts` |
+| `PlatformCredential.capabilities` | `CredentialCapabilitiesSchema` | `modules/publish/credential.schemas.ts` |
+| `Trend.raw` | `TrendRawSchema` | `modules/trend/trend.schemas.ts` |
+| `TrendSignal.metrics` | `TrendSignalMetricsSchema` | `modules/trend/trend.schemas.ts` |
+| `Rendition.rendererMeta` | `RendererMetaSchema` | `modules/render/rendition.schemas.ts` |
+| `PostMetric.raw` | `PostMetricRawSchema` | `modules/insight/metric.schemas.ts` |
+
+`TemplateLayoutSchema` is the contract W4's layout compiler renders from. It encodes the
+node union and the `$brand.*` / `$slot.*` / `$scale(n)` / `$fit(max, min)` binding grammar
+defined in [05](./05-template-engine.md), and every seeded template is parsed through it in
+a test — a layout the compiler could not consume cannot reach the database.
+
+## What changed during implementation (W2)
+
+The sketches above are what W2 built, with these deliberate differences. Recorded here
+because this document is the contract other workstreams read.
+
+**`Template.workspaceId` exists and is nullable.** The W2 brief asks that templates carry
+no `workspaceId`; [ADR-0010](./adr/0010-workspace-per-client.md) asks that the column exist
+as nullable from the start so client-specific templates are additive. These are the same
+requirement stated from two directions: what templates must not have is a *required* tenant
+column that would partition the shared library. `null` means global, every seeded template
+is global, and no v1 code path writes a non-null value.
+
+**`Brand.deletedAt` and `Post.deletedAt` are real columns.** The conventions section called
+for soft deletes on both, but neither model declared the field. Added, with
+`@@index([workspaceId, deletedAt])` and `@@index([brandId, deletedAt])` so the filter is
+cheap. Read paths must filter `deletedAt: null`; this is not enforced by the database.
+
+**`AiGeneration.brandId` is a real foreign key**, not a bare string. ADR-0010 makes
+offboarding "`DELETE FROM workspaces` and cascade"; a dangling `brandId` would have left
+prompt and response text behind after a client left. It cascades from `Brand`.
+
+**`Workspace.slug` added.** Workspaces are addressable tenants, and the seed needs a stable
+natural key to be idempotent against.
+
+**`PostTarget` gained `@@unique([postId, platform])`.** One post publishes at most once per
+platform. Without the constraint, a retry that re-creates rather than updates silently
+double-posts — the failure mode is invisible until a client sees it in their feed.
+
+**Timestamps filled in.** Several sketched models had `createdAt` but no `updatedAt`
+(`BusinessCategory`, `PersonaLayer`, `Asset`, `Trend`, `PostTarget`). Added for consistency.
+
+**Referential actions made explicit.** Optional parents (`Post.template`, `Post.trend`,
+`Post.persona`, `PostTarget.socialAccount`, `PostTarget.rendition`,
+`SocialAccount.credential`, `Brand.category`) are `SetNull`, so losing a parent degrades a
+row rather than deleting history. `Brand.logo` is `NoAction` specifically: `Brand → Asset`
+already cascades, and a second action back would form a cycle Postgres refuses to create.
+
+**Secondary indexes added** for foreign keys that are joined but were not covered:
+`memberships(workspaceId, role)`, `business_categories(parentId)`,
+`social_accounts(credentialId)`, `platform_credentials(brandId)`,
+`template_category_tags(categoryId, weight)`, `trend_category_scores(categoryId, score)`,
+`posts(brandId, scheduleSlot)`, `posts(variantGroupId)`, `short_links(postId)`,
+`link_clicks(shortLinkId, isBot, occurredAt)`, `ai_generations(postId)`.
 
 ## Migration strategy
 
@@ -701,7 +813,26 @@ Because no data is worth preserving:
 2. Write the new `schema.prisma` in one pass.
 3. Generate a single `0001_init` migration.
 4. Build a seed script covering: the business-category taxonomy, 8–12 published
-   templates with category tags, a demo workspace, and the Rise & Shore + TaxDedux brands.
+   templates with category tags, and the Rise & Shore + TaxDedux workspaces.
 
 The seed script is not a nicety — it is the only way subsequent agents can work on
 recommendation and rendering code without hand-creating fixtures.
+
+### Seeded data
+
+`npm run db:seed` is idempotent: every row's UUID is derived deterministically from a
+stable natural key, so each write is an upsert by id and a re-run is a no-op. Generated
+numbers come from a seeded PRNG, so two runs produce identical data.
+
+It creates two **workspaces** — Rise & Shore and TaxDedux — not two brands in one
+workspace ([ADR-0010](./adr/0010-workspace-per-client.md)), with deliberately different
+posting histories so recommendation and send-time differences are visible rather than
+theoretical. Posts are spread across all eight send-time buckets (weekday/weekend ×
+four dayparts, [06](./06-outcome-and-feedback-loop.md)), at least one schedule crosses a
+US DST transition, and at least one TaxDedux post is `MediaType.TEXT` with **zero**
+renditions — the path a publish pipeline is most likely to assume away.
+
+> **Seeded credentials are unmistakably fake**, e.g.
+> `seed-fake-not-a-real-token-instagram`. Seed data gets copied by people who assume it is
+> inert, so a realistic-looking secret in a seed file is a future incident. Being visibly
+> fake is the feature.
