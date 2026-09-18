@@ -12,7 +12,7 @@
  */
 
 import { emojiDataUri } from './emoji';
-import { familyCovers, loadCoverage, type CoverageRange } from './fonts';
+import { familyCovers, loadMetrics, type FamilyMetrics } from './fonts';
 import { UnrenderableTextError } from './render.errors';
 
 /**
@@ -40,12 +40,12 @@ function drawnCodepoints(grapheme: string): number[] {
 async function isRenderable(
   grapheme: string,
   families: readonly string[],
-  coverage: Map<string, CoverageRange[]>,
+  metrics: Map<string, FamilyMetrics>,
 ): Promise<boolean> {
   const codepoints = drawnCodepoints(grapheme);
   if (codepoints.length === 0) return true;
 
-  if (codepoints.every((cp) => families.some((family) => familyCovers(coverage, family, cp)))) {
+  if (codepoints.every((cp) => families.some((family) => familyCovers(metrics, family, cp)))) {
     return true;
   }
 
@@ -65,14 +65,14 @@ export async function findUnrenderableGraphemes(
   text: string,
   families: readonly string[],
 ): Promise<string[]> {
-  const coverage = await loadCoverage();
+  const metrics = await loadMetrics();
   const unrenderable: string[] = [];
   const seen = new Set<string>();
 
   for (const grapheme of graphemes(text)) {
     if (seen.has(grapheme)) continue;
     seen.add(grapheme);
-    if (!(await isRenderable(grapheme, families, coverage))) unrenderable.push(grapheme);
+    if (!(await isRenderable(grapheme, families, metrics))) unrenderable.push(grapheme);
   }
 
   return unrenderable;

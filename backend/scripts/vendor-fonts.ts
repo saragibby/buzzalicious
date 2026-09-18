@@ -13,13 +13,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  COVERAGE_FILE,
+  METRICS_FILE,
   CURATED_FONTS,
   FONT_ASSET_DIR,
   FONT_SUBSETS,
   fontFileName,
   type CoverageRange,
   type CuratedFont,
+  type FamilyMetrics,
 } from '../src/modules/render/fonts';
 
 const CDN = 'https://cdn.jsdelivr.net/npm';
@@ -38,14 +39,15 @@ async function download(url: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
-/**
- * The codepoints a font file can actually draw, read straight out of its `cmap`.
- *
- * Computed here rather than at runtime so the render path never parses a font twice and
- * never depends on Satori's bundled opentype fork, which is a transitive dependency and
- * not ours to rely on.
- */
+interface ParsedGlyph {
+  advanceWidth?: number;
+}
+
 interface ParsedFont {
+  unitsPerEm: number;
+  ascender: number;
+  descender: number;
+  glyphs: { get(index: number): ParsedGlyph | undefined };
   tables: { cmap: { glyphIndexMap: Record<string, number> } };
 }
 
@@ -55,12 +57,42 @@ const opentype = require('@shuding/opentype.js') as {
   parse(buffer: ArrayBuffer): ParsedFont;
 };
 
-function coverageOf(file: Buffer): number[] {
+/**
+ * What a font file can draw, and how wide each character is.
+ *
+ * Both are read here rather than at runtime, for the same two reasons. The render path
+ * should never parse ~830KB of fonts just to decide whether a headline fits — `$fit`
+ * binary-searches font sizes and would re-measure on every step. And the only font parser
+ * to hand is Satori's bundled opentype fork, a transitive dependency not ours to rely on.
+ *
+ * Advance widths are in font units; dividing by `unitsPerEm` gives ems, which scale
+ * linearly with font size. Kerning is ignored — it is a sub-percent correction and
+ * `measure.ts` carries a safety margin that covers it.
+ */
+function readFont(file: Buffer): {
+  codepoints: number[];
+  widths: Record<number, number>;
+  unitsPerEm: number;
+  ascender: number;
+  descender: number;
+} {
   const bytes = Uint8Array.prototype.slice.call(file);
   const font = opentype.parse(bytes.buffer as ArrayBuffer);
-  return Object.keys(font.tables.cmap.glyphIndexMap)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const map = font.tables.cmap.glyphIndexMap;
+  const widths: Record<number, number> = {};
+
+  for (const [codepoint, glyphIndex] of Object.entries(map)) {
+    const advance = font.glyphs.get(glyphIndex)?.advanceWidth;
+    if (advance !== undefined) widths[Number(codepoint)] = advance;
+  }
+
+  return {
+    codepoints: Object.keys(map).map(Number),
+    widths,
+    unitsPerEm: font.unitsPerEm,
+    ascender: font.ascender,
+    descender: font.descender,
+  };
 }
 
 /** Codepoints collapse into ranges: ~370 per subset becomes a few dozen pairs. */
@@ -78,6 +110,7 @@ function toRanges(codepoints: number[]): CoverageRange[] {
 
 async function main(): Promise<void> {
   await mkdir(FONT_ASSET_DIR, { recursive: true });
+  const metrics: Record<string, FamilyMetrics> = {};
   const coverage: Record<string, number[]> = {};
 
   for (const font of CURATED_FONTS) {
@@ -93,10 +126,22 @@ async function main(): Promise<void> {
         const file = await download(url);
         await writeFile(target, file);
 
+        const parsed = readFont(file);
+
         // Weights of one family cover the same characters, so the union across weights is
         // the family's coverage and any single weight would do. Union anyway: a subset
         // that silently loses a glyph at one weight should widen nothing.
-        coverage[font.family] = [...new Set([...(coverage[font.family] ?? []), ...coverageOf(file)])];
+        coverage[font.family] = [...new Set([...(coverage[font.family] ?? []), ...parsed.codepoints])];
+
+        const entry = (metrics[font.family] ??= {
+          unitsPerEm: parsed.unitsPerEm,
+          ascender: parsed.ascender,
+          descender: parsed.descender,
+          coverage: [],
+          widths: {},
+        });
+        // Subsets of one weight are disjoint, so this merges rather than overwrites.
+        entry.widths[weight] = { ...entry.widths[weight], ...parsed.widths };
 
         process.stdout.write(`${path.basename(target)}\n`);
       }
@@ -108,14 +153,12 @@ async function main(): Promise<void> {
     process.stdout.write(`${path.basename(licenceFile)}\n`);
   }
 
-  const ranges = Object.fromEntries(
-    Object.entries(coverage).map(([family, codes]) => [
-      family,
-      toRanges(codes.sort((a, b) => a - b)),
-    ]),
-  );
-  await writeFile(COVERAGE_FILE, `${JSON.stringify(ranges, null, 2)}\n`);
-  process.stdout.write(`${path.basename(COVERAGE_FILE)}\n`);
+  for (const [family, codes] of Object.entries(coverage)) {
+    metrics[family].coverage = toRanges(codes.sort((a, b) => a - b));
+  }
+
+  await writeFile(METRICS_FILE, `${JSON.stringify(metrics)}\n`);
+  process.stdout.write(`${path.basename(METRICS_FILE)}\n`);
 }
 
 main().catch((error: unknown) => {
