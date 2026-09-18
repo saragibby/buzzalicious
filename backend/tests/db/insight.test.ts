@@ -142,6 +142,7 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
   let solo: Fixture;
   let floor: Fixture;
   let mixed: Fixture;
+  let blank: Fixture;
 
   beforeAll(async () => {
     db = getPrisma();
@@ -318,6 +319,21 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
         snapshots: [{ hours: 1, saves: 4, likes: 1 }],
       },
     });
+
+    // The aggregate null-vs-zero boundary. `dark` has published targets that have never
+    // been polled, so nothing in it is scorable; `lit` sits in the same brand and IS
+    // scorable. Both are needed: `lit` is what proves a null on `dark` means "nothing was
+    // measurable" rather than "the query returned nothing and every assertion below is
+    // vacuous".
+    blank = await makeTenant('Blank', {
+      n1: { platform: 'X', templateKey: 'dark', snapshots: [] },
+      n2: { platform: 'X', templateKey: 'dark', snapshots: [] },
+      y1: {
+        platform: 'X',
+        templateKey: 'lit',
+        snapshots: [{ hours: 1, linkClicks: 6, likes: 2 }],
+      },
+    });
   });
 
   afterAll(async () => {
@@ -400,6 +416,34 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
       }
       expect(unpolled!.capturedAt).toBeNull();
       expect(unpolled!.outcome.score).toBeNull();
+    });
+
+    it('reports a group with nothing measurable as null, never as a zero score', async () => {
+      const summary = await insightSummary(scoped(blank), WINDOW);
+      const keys = summary.byTemplate.map((group) => group.key);
+      const dark = summary.byTemplate.find((group) => group.key === blank.templates.dark);
+      const lit = summary.byTemplate.find((group) => group.key === blank.templates.lit);
+
+      // Identity first. A missing group would make every assertion below vacuous, and
+      // `find` returning undefined is exactly what a broken tenancy rule or an empty
+      // result looks like.
+      expect(keys).toContain(blank.templates.dark);
+      expect(dark).toBeDefined();
+
+      // `toBeNull`, not `toBeFalsy` -- 0 is falsy, and 0 is the precise bug this guards.
+      expect(dark!.meanScore).toBeNull();
+      expect(dark!.meanScore).not.toBe(0);
+
+      // The targets were found and counted; the group is empty of SCORES, not of posts.
+      // Without this, deleting the fixture entirely would still pass the null assertion.
+      expect(dark!.scored).toBe(0);
+      expect(dark!.unscored).toBe(2);
+      expect(dark!.sharedComponents).toEqual([]);
+
+      // The positive control, in the same call and the same brand: aggregation genuinely
+      // ran and can produce a number. Without it, a `meanScore` hard-coded to null passes.
+      expect(lit!.meanScore).toBeGreaterThan(0);
+      expect(lit!.scored).toBe(1);
     });
 
     it('does not report an unmeasured metric that a sibling target does report', async () => {

@@ -170,6 +170,25 @@ describe.skipIf(!hasTestDatabase)('link injection at publish', () => {
      * `target.caption ?? ''`, which publishes an **empty post** for every target the user
      * never gave a per-platform override — the ordinary case for a draft written once and
      * sent everywhere. No existing test caught it because every fixture set a caption.
+     *
+     * ## Why `effectiveCaption` must stay a named function
+     *
+     * The blast radius was wider than a single wrong expression. `effectiveCaption`
+     * already existed, and the caption **gate** used it correctly — so the gate measured
+     * and approved the inherited base copy, and then the publisher shipped `''`. Two code
+     * paths that are supposed to agree about one value disagreed in production, and the
+     * gate's approval is exactly what made it invisible.
+     *
+     * Its own doc comment had already predicted this, twelve lines from where the bug was
+     * written:
+     *
+     * > `null` inherits; `''` does not. Kept as a named function rather than an inline
+     * > `??` at each call site precisely because the two look interchangeable and are not.
+     *
+     * So: do not inline this back into a `??`, however tidy it looks at the call site.
+     * The pair of tests below is the enforcement — the first proves `null` inherits, the
+     * second proves `''` still does not, and only together do they pin the distinction
+     * that the shorthand destroys.
      */
     it('publishes the base copy when the target caption is null', async () => {
       const brand = await makeBrand(null);
