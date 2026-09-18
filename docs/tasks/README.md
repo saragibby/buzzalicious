@@ -15,7 +15,9 @@ sized for a single agent session.
 ## Ground rules
 
 - **`schema.prisma` is owned by W2 only.** Schema changes serialize through that owner —
-  never edit it from two sessions.
+  never edit it from two sessions. W2 is complete;
+  [W10](./W10-usage-metering.md) holds this ownership for its migration, and no other
+  session may edit the file while W10 is open.
 - **W0 and W1 must merge before anything else.** Everything downstream assumes the new
   structure.
 - Tests are part of done, not a follow-up.
@@ -36,3 +38,4 @@ sized for a single agent session.
 | [W7](./W7-outcome-spine.md) | Outcome spine | W2, W6 |
 | [W8](./W8-feedback-loop.md) | Feedback loop v0 | W4, W7 |
 | [W9](./W9-trend-engine.md) | Trend engine v0 | W2 |
+| [W10](./W10-usage-metering.md) | Usage metering & AI spend fuse | W2, W3 |
