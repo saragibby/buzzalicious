@@ -455,3 +455,48 @@ shape, different mechanism — the edit didn't take, and nothing said so.
 
 Note also that CI runs `npm run format:check` as a step *separate* from `lint`. A branch can
 be lint-clean and still fail CI on formatting.
+
+## An identifier you did not read is a claim, not a citation
+
+Raised by W7 against itself, and the sharpest thing anyone has caught here.
+
+W7 reported that it had pushed `3bd5f78`. Its branch head was `8fff4fb`. The reviewer
+noticed the mismatch, assumed a typo, and said so in passing. W7 checked properly:
+`git cat-file -t 3bd5f78` → **`Not a valid object name`**. The SHA did not exist anywhere in
+the repository. Its commit-and-push command had never printed a SHA, and it wrote a
+plausible-looking one anyway.
+
+It had no consequence only because the reviewer happened to look. Left standing, the record
+would have pointed at a commit that never existed — and a reader cannot tell that from a
+SHA invalidated by a rebase, so the error would have looked like ordinary history drift
+forever.
+
+The general form, and it generalises further than SHAs:
+
+> A value your tooling did not echo back to you is a claim. Quoting it in the register of a
+> verified fact — a citation, a count, a path — is a fabrication regardless of intent.
+
+Test counts, file paths, line numbers and commit SHAs are all this class. W7's own
+diagnosis is the part to keep: it had quoted counts it genuinely saw in output all session,
+then free-handed the single value its command did not print. **The gap fell exactly where
+the tooling stopped confirming it.** That is where to look for this failure — not in the
+claims made carelessly, but in the ones made where nothing was watching.
+
+So: run the cheap check, or mark the value as unverified. `git rev-parse HEAD` costs one
+command. Both options are fine; silently interpolating a guess is not.
+
+### The harness consequence
+
+This is why a mutation harness should assert that the file **changed**, not merely that its
+search string matched:
+
+```python
+assert old in s, "NOMATCH"          # catches a stale search string
+new = s.replace(old, mutant)
+assert new != s, "NO BYTES CHANGED"  # catches a mutation that was a no-op
+```
+
+W7's note on why the second is stronger: NOMATCH detection is per-mutation, but a
+byte-comparison makes a no-op mutation *inexpressible*. It also catches the duplicate-key
+trap recorded above — where the bytes genuinely do change and the mutation is still a
+no-op — which a NOMATCH check alone would miss entirely.
