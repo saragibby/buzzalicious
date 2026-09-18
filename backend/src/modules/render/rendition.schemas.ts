@@ -13,6 +13,8 @@ export const RendererMetaSchema = z
     satoriVersion: z.string().min(1),
     resvgVersion: z.string().min(1),
     sharpVersion: z.string().min(1).optional(),
+    /** libvips, which is what actually rasterizes; sharp is a thin binding over it. */
+    vipsVersion: z.string().min(1).optional(),
     /** The `Template.version` rendered, which may trail the template's current version. */
     templateVersion: z.number().int().positive(),
     durationMs: z.number().nonnegative().optional(),

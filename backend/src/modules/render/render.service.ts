@@ -22,6 +22,7 @@
 
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import sharp from 'sharp';
 import type { AspectRatio, MediaType } from '@prisma/client';
 import type { Db } from '../../platform/db';
 import { NotFoundError, ValidationError } from '../../platform/errors';
@@ -201,6 +202,7 @@ interface Versions {
   satoriVersion: string;
   resvgVersion: string;
   sharpVersion: string;
+  vipsVersion: string;
 }
 
 let versionCache: Versions | undefined;
@@ -212,7 +214,7 @@ let versionCache: Versions | undefined;
 const resolve = createRequire(__filename);
 
 /** Recorded on every rendition so an unexpected pixel change can be attributed. */
-function loadVersions(): Versions {
+export function loadVersions(): Versions {
   if (versionCache) return versionCache;
 
   const read = (name: string): string => {
@@ -226,7 +228,12 @@ function loadVersions(): Versions {
   versionCache = {
     satoriVersion: read('satori'),
     resvgVersion: read('@resvg/resvg-js'),
-    sharpVersion: read('sharp'),
+    // Not `read('sharp')`: sharp's `exports` map does not expose `./package.json`, so the
+    // manifest route throws and quietly records "unknown" — which defeats the entire point
+    // of recording a version. It publishes its own instead, and `vips` is worth having too
+    // because the native library is what actually decides the pixels.
+    sharpVersion: sharp.versions.sharp ?? 'unknown',
+    vipsVersion: sharp.versions.vips ?? 'unknown',
   };
 
   return versionCache;
