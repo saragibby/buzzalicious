@@ -50,6 +50,21 @@ a retry storm. Getting the *measurement* right now is what keeps that decision c
 - **Vendor cost, not price.** `modules/ai/pricing.ts` records what a call cost *us*. An
   unpriced model returns `null` and under-reports visibly rather than charging a guessed
   rate.
+- **A brand-scoped read sees a smaller total than a workspace-scoped one, on purpose.**
+  `UsageEvent.brandId` is nullable, because platform-global work — trend classification,
+  billed to the reserved `platform` workspace — belongs to no brand. The tenancy rule for
+  `UsageEvent` is `{ brandId }`, so those null-brand rows are invisible under a brand scope.
+  That is correct: a brand's usage is the usage attributable to *that brand*. Do not
+  "fix" it by loosening the rule to reach the workspace — the workspace-level number is
+  what `UsagePeriodRollup` and the budget check already read, and the ceiling is enforced
+  per workspace, never per brand.
+
+  Note the related trap. `UsagePeriodRollup` has no `brandId`, so its brand rule reaches
+  the workspace *through* the brand relation. An empty fragment there is **not a deny, it
+  is no filter** — it ANDs to nothing and hands a brand-scoped client every workspace's
+  spend. That exact bug was written and caught during W10; it is pinned by
+  `hides another workspace’s rollups from a brand-scoped client` in `tests/db/usage.test.ts`,
+  which asserts on *which* workspaces come back rather than on how many.
 
 ## Emitting
 

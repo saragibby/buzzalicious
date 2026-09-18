@@ -179,7 +179,7 @@ branch to merge is fine, and the second and third are the ones exposed. So:
 
 ## Current state (end of M3)
 
-505 tests across 48 files.
+507 tests across 49 files.
 
 Running without a database, 424 of them: crypto round-trip and tamper detection, the
 Prisma encryption extension against a mock, config validation, the storage driver and its
@@ -187,7 +187,7 @@ signed URLs, local-to-UTC time conversion across DST, the HTTP error boundary an
 smoke tests, the AI prompt and parse layer, every JSON column's Zod contract, and the
 frontend auth guard and API client.
 
-With `TEST_DATABASE_URL` set, 81 more in `backend/tests/db/`:
+With `TEST_DATABASE_URL` set, 83 more in `backend/tests/db/`:
 
 - **`encryption.test.ts`** — that the stored column is ciphertext, asserted with
   `$queryRaw` against the raw value. A round-trip through our own codec passes even when
@@ -206,8 +206,14 @@ With `TEST_DATABASE_URL` set, 81 more in `backend/tests/db/`:
   a rebuild repairing deliberately corrupted drift, the AI ceiling refusing generation
   while still allowing a publish, and the raw rollup insert binding `periodStart` as UTC.
   Every claim here is trivially satisfiable by a vacuous test, so each is paired with a
-  control that must move the same number — see the file header, and the mutation evidence
-  below.
+  control that must move the same number — see the file header. Also the brand-scope
+  tenancy case: a `ScopeRule` returning `{}` is *no filter*, not a deny, so that test
+  asserts on **which** workspaces come back rather than on a count, with the other
+  workspace's rows guaranteed present at the time of the read.
+- **`usage-admin-serialization.test.ts`** — that the admin response actually serializes.
+  `quantity` is a `BigInt` and `JSON.stringify` throws on one, so a field later returned
+  straight from Prisma would fail at runtime, only on a populated database. Real read
+  layer, real `res.json`, only the two auth layers mocked.
 - **`trend-mapping-budget.test.ts`** — that `classifyWithLlm` rethrows
   `BudgetExceededError` but still degrades to rule matches on a provider failure. Both
   halves, because a service that rethrows everything passes the first alone and a service

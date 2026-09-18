@@ -43,6 +43,7 @@ interface Fixture {
 describe.skipIf(!hasTestDatabase)('usage metering', () => {
   let db: Db;
   const created: string[] = [];
+  const createdBrands: string[] = [];
 
   async function makeWorkspace(name: string, ceilingUsd?: string): Promise<Fixture> {
     const id = seedId('test-workspace', `usage/${name}`);
@@ -69,6 +70,26 @@ describe.skipIf(!hasTestDatabase)('usage metering', () => {
     return { workspaceId: id };
   }
 
+  async function makeBrand(workspaceId: string, name: string): Promise<string> {
+    const id = seedId('test-brand', `usage/${name}`);
+    await db.brand.upsert({
+      where: { id },
+      create: {
+        id,
+        workspaceId,
+        name: `Usage test brand ${name}`,
+        slug: `usage-test-brand-${name}`,
+        palette: {},
+        typography: {},
+        voiceGuide: {},
+      },
+      update: { workspaceId },
+    });
+
+    createdBrands.push(id);
+    return id;
+  }
+
   async function rollup(
     id: string,
     metric: UsageMetric = UsageMetric.AI_TOKENS,
@@ -88,6 +109,7 @@ describe.skipIf(!hasTestDatabase)('usage metering', () => {
   afterAll(async () => {
     await db.usageEvent.deleteMany({ where: { workspaceId: { in: created } } });
     await db.usagePeriodRollup.deleteMany({ where: { workspaceId: { in: created } } });
+    await db.brand.deleteMany({ where: { id: { in: createdBrands } } });
     await db.workspace.deleteMany({ where: { id: { in: created } } });
     await disconnectPrisma();
   });
@@ -524,6 +546,56 @@ describe.skipIf(!hasTestDatabase)('usage metering', () => {
       const rollups = await scoped.usagePeriodRollup.findMany({ select: { workspaceId: true } });
       expect(rollups.length).toBeGreaterThan(0);
       expect(rollups.every((r) => r.workspaceId === mine.workspaceId)).toBe(true);
+    });
+
+    /**
+     * The rollup has no `brandId`, so its brand rule has to reach the workspace through the
+     * brand relation. The first version of that rule returned `{}` — which is **not a deny,
+     * it is no filter**, ANDing to nothing and handing a brand-scoped client every
+     * workspace's spend.
+     *
+     * The workspace-scoped test above cannot see that: it never evaluates the brand rule.
+     * So this asserts on the *identity* of what comes back rather than on a count, and
+     * guarantees the other workspace's rows are present in the table at the time of the
+     * read. A "returns 0 rows" assertion would pass under the `{}` bug for the wrong
+     * reason — that leak returns more rows, not fewer.
+     */
+    it('hides another workspace’s rollups from a brand-scoped client', async () => {
+      const mine = await makeWorkspace('tenancy-brand-mine');
+      const theirs = await makeWorkspace('tenancy-brand-theirs');
+      const myBrandId = await makeBrand(mine.workspaceId, 'mine');
+      await makeBrand(theirs.workspaceId, 'theirs');
+
+      for (const ws of [mine.workspaceId, theirs.workspaceId]) {
+        await emitUsage(db, {
+          workspaceId: ws,
+          metric: UsageMetric.AI_TOKENS,
+          quantity: 10,
+          providerCostUsd: '0.01',
+          idempotencyKey: `tenancy-brand:${ws}`,
+          occurredAt: PERIOD,
+        });
+      }
+
+      // The control. If the other workspace's rollup were simply absent, a scoped read
+      // returning only my rows would prove nothing at all.
+      const unscoped = await db.usagePeriodRollup.findMany({
+        where: { workspaceId: { in: [mine.workspaceId, theirs.workspaceId] } },
+        select: { workspaceId: true },
+      });
+      expect([...new Set(unscoped.map((r) => r.workspaceId))].sort()).toEqual(
+        [mine.workspaceId, theirs.workspaceId].sort(),
+      );
+
+      const scoped = withTenantScope(db, {
+        kind: 'brand',
+        workspaceId: mine.workspaceId,
+        brandId: myBrandId,
+      });
+      const rollups = await scoped.usagePeriodRollup.findMany({ select: { workspaceId: true } });
+
+      expect(rollups.some((r) => r.workspaceId === mine.workspaceId)).toBe(true);
+      expect(rollups.some((r) => r.workspaceId === theirs.workspaceId)).toBe(false);
     });
   });
 
