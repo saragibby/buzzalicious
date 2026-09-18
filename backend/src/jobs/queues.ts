@@ -19,6 +19,7 @@ export const QUEUE = {
   publishTarget: 'publish.target',
   publishSweep: 'publish.sweep',
   credentialValidate: 'credential.validate',
+  accountHealth: 'account.health',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];

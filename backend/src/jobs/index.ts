@@ -8,6 +8,7 @@ import {
   handlePublishTarget,
   type HandlerDeps,
 } from './handlers/publish.handlers';
+import { handleAccountHealthSweep } from './handlers/health.handlers';
 import { QUEUE } from './queues';
 
 /**
@@ -76,6 +77,7 @@ export async function startWorker(): Promise<void> {
 
   await instance.createQueue(QUEUE.publishTarget);
   await instance.createQueue(QUEUE.publishSweep);
+  await instance.createQueue(QUEUE.accountHealth);
 
   await instance.work(QUEUE.publishTarget, async (jobs: Job<unknown>[]) => {
     for (const job of jobs) {
@@ -91,6 +93,15 @@ export async function startWorker(): Promise<void> {
   // already at the mercy of platform latency — and coarser would make a one-minute retry
   // backoff meaningless.
   await instance.schedule(QUEUE.publishSweep, '* * * * *');
+
+  await instance.work(QUEUE.accountHealth, async () => {
+    await handleAccountHealthSweep({ db: getPrisma() });
+  });
+
+  // Hourly, on the hour. The sweep refreshes anything inside a seven-day window, so the
+  // interval only has to be small relative to that — hourly gives roughly 168 chances to
+  // refresh a token before it expires, which survives a worker being down for a day.
+  await instance.schedule(QUEUE.accountHealth, '0 * * * *');
 
   log.info({ queues: Object.values(QUEUE) }, 'Worker started');
 }

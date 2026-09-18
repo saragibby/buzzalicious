@@ -99,6 +99,17 @@ export interface PlatformFailure {
   readonly message?: string;
   readonly retryAfterSeconds?: number;
   readonly cause?: unknown;
+  /**
+   * A class the caller has already established from a platform-specific signal.
+   *
+   * For Meta, the numeric Graph `code` is far more reliable than either the message or the
+   * status — Graph answers a revoked token, a missing app permission, a bad parameter and
+   * a duplicate post all with `HTTP 400`, and only the code separates them. An adapter
+   * that has decoded such a signal passes the verdict here rather than building a
+   * `PlatformError` itself, so there is still exactly one place that decides a client
+   * message and a retry policy from a class.
+   */
+  readonly errorClass?: PublishErrorClass;
 }
 
 /**
@@ -143,16 +154,23 @@ const CLIENT_MESSAGES: Readonly<Record<PublishErrorClass, string>> = {
 /**
  * Turn whatever a platform threw into a classified error.
  *
+ * Precedence, most specific signal first: an `errorClass` the adapter decoded from a
+ * platform code, then a message rule, then the status. Each step down is a step further
+ * from what the platform actually said.
+ *
  * Message rules run **before** status rules. A 403 is `AUTH` by default, but X's
  * read-only refusal is a 403 that means something else entirely, and defaulting first
  * would mean the specific rule never fires.
  */
 export function classifyPlatformError(failure: PlatformFailure): PlatformError {
   const message = failure.message ?? 'Unknown platform error';
-  let errorClass = matchByMessage(message) ?? matchByStatus(failure.status);
+  let errorClass = failure.errorClass ?? matchByMessage(message) ?? matchByStatus(failure.status);
 
-  // A 429 always means slow down, whatever the body says.
-  if (failure.status === 429) errorClass = 'TRANSIENT';
+  // A 429 always means slow down, whatever the body says — unless the caller decoded a
+  // specific code, which is the one thing that knows better. Meta returns 429 for both an
+  // ordinary rate limit and a daily publishing quota, and the two want different handling:
+  // one requeues in seconds, the other must wait out the window.
+  if (failure.status === 429 && failure.errorClass === undefined) errorClass = 'TRANSIENT';
 
   const clientMessage =
     errorClass === 'POLICY'

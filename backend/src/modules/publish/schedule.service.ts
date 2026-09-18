@@ -2,6 +2,7 @@ import type { PostTarget } from '@prisma/client';
 import type { Db } from '../../platform/db';
 import type { ScopedDb } from '../../platform/tenancy';
 import { ValidationError } from '../../platform/errors';
+import { assertCaptionsFit } from './caption-gate';
 
 /**
  * Scheduling.
@@ -37,6 +38,12 @@ export async function scheduleTargets(
   if (input.scheduledFor.getTime() > horizon.getTime()) {
     throw new ValidationError('A post cannot be scheduled more than a year ahead.');
   }
+
+  // Before anything is marked SCHEDULED. An over-length caption used to be accepted here
+  // and rejected by the adapter when the job ran — long after the user had moved on, and
+  // at a moment nobody is watching. Scheduling is the commitment; this is where the text
+  // has to be answerable for.
+  await assertCaptionsFit(db, input.targetIds);
 
   const { count } = await db.postTarget.updateMany({
     // Only targets that have not gone anywhere yet. Rescheduling something already

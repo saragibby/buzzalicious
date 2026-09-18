@@ -1,20 +1,21 @@
 import type { Platform } from '@prisma/client';
 import { TwitterApi } from 'twitter-api-v2';
-import type {
-  AccountHealth,
-  AuthUrlContext,
-  CapabilityReport,
-  ConnectedAccount,
-  MetricsTarget,
-  OAuthCallback,
-  PlatformAdapter,
-  PlatformMetrics,
-  PlatformSpec,
-  PublishInput,
-  PublishResult,
-  ResolvedCredential,
-  StoredAccount,
-  TokenSet,
+import {
+  buildAdapterSpec,
+  type AccountHealth,
+  type AuthUrlContext,
+  type CapabilityReport,
+  type ConnectedAccount,
+  type MetricsTarget,
+  type OAuthCallback,
+  type PlatformAdapter,
+  type PlatformMetrics,
+  type PlatformSpec,
+  type PublishInput,
+  type PublishResult,
+  type ResolvedCredential,
+  type StoredAccount,
+  type TokenSet,
 } from '../adapter.types';
 import { classifyPlatformError, isPlatformError, type PlatformError } from '../publish.errors';
 import { measureCaption } from '../../template/platform-spec';
@@ -145,17 +146,18 @@ function asMediaIds(ids: readonly string[]): MediaIdTuple {
   return ids.slice(0, MAX_MEDIA) as unknown as MediaIdTuple;
 }
 
-export const X_SPEC: PlatformSpec = {
-  // 280 for standard accounts. Premium raises it, but we cannot tell which tier a
-  // client's account is on without an extra call, and being wrong in the permissive
-  // direction means a publish that fails at the platform after the user thought it was
-  // scheduled. Being wrong in the strict direction costs a character counter.
-  captionMaxLength: 280,
-  supportedRatios: ['SQUARE_1_1', 'PORTRAIT_4_5', 'LANDSCAPE_16_9', 'STORY_9_16'],
-  mediaRequired: false,
+/**
+ * X's spec.
+ *
+ * The caption limit, ratios, `mediaRequired` and `linkBehavior` are no longer stated here
+ * — they come from the shared table, which is the same one the composer counts against.
+ * 280 is the standard-account limit; Premium raises it, but we cannot tell a client's tier
+ * without an extra call, and being wrong in the permissive direction means a publish that
+ * fails at the platform after the user thought it was scheduled.
+ */
+export const X_SPEC: PlatformSpec = buildAdapterSpec('X', {
   maxMediaCount: MAX_MEDIA,
   supportsScheduling: false,
-  linkBehavior: 'inline',
   requiredScopes: {
     // OAuth 1.0a has no scope strings — access is an app-level permission setting
     // ("Read" vs "Read and write"). The empty arrays are honest: pre-flight cannot
@@ -167,7 +169,7 @@ export const X_SPEC: PlatformSpec = {
     read_insights: [],
     read_hashtags: [],
   },
-};
+});
 
 export class XAdapter implements PlatformAdapter {
   readonly platform: Platform = 'X';

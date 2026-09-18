@@ -13,6 +13,10 @@ const NAV = [
   { to: '/insights', label: 'Insights' },
   { to: '/brand', label: 'Brand kit' },
   { to: '/settings', label: 'Settings' },
+  // W6. Appended rather than nested under Settings: connections are the thing a user
+  // checks when a post did not go out, and burying that behind a settings index adds a
+  // click to the one journey that is always urgent.
+  { to: '/settings/connections', label: 'Connections' },
 ] as const;
 
 /**

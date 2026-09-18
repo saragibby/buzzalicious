@@ -335,3 +335,46 @@ With `TEST_DATABASE_URL` set, 105 more in `backend/tests/db/`:
   `BudgetExceededError` but still degrades to rule matches on a provider failure. Both
   halves, because a service that rethrows everything passes the first alone and a service
   that swallows everything passes the second alone.
+- **`account-health.test.ts`** — W6 PR 2's sweep, revocation and the connections read.
+  The interesting part is a mistake it caught in itself. The revocation tests separate
+  their two tenants by `credentialId`, so the tenancy rule is redundant there: replacing
+  `byBrandColumn.brand` with `() => ({})` left every one of them green. The test that
+  actually pins the brand rule needs scope to be the **only** separator — two brands in
+  *one* workspace, asserted with `toContain` / `not.toContain` on identity. With that added,
+  the same mutation kills 14 tests. A tenancy test whose fixtures differ in any other
+  column is not testing tenancy, however much it looks like it is.
+
+  Also covers: the sweep refreshing only inside its window and skipping `REVOKED` accounts,
+  one platform failing without abandoning the rest, `connect()` fanning out across **two
+  brands**, the nullable-`SocialAccount.credentialId` shape, both scope kinds on the
+  connections read, and — asserted on the serialized body rather than the object — that no
+  token reaches the response.
+
+## The failure that looks exactly like a pass
+
+Worth repeating because it happened again in W6 PR 2. A test file that fails to *load*
+reports `0 test` for that file and **zero failures** overall. The run is green-ish, the
+summary looks fine, and the assertions simply never happened. In PR 2 it was an import of
+`@testing-library/user-event`, which is not a dependency of this repo.
+
+The only defence is to compare **both** totals — `Test Files` and `Tests` — against the
+number you expected, every time. A number that only went up is not evidence.
+
+## A unit-tested guard is not a *wired* guard
+
+Also from W6 PR 2, and the more expensive of the two. `caption-gate.ts` had fourteen unit
+tests — every platform's counting unit, every message, the `''`-versus-`null` override
+distinction — all green. Commenting out the single `await assertCaptionsFit(...)` line
+inside `scheduleTargets` broke **none of them**.
+
+Fourteen tests proving the guard works, zero proving it was reached. That is the same class
+of defect as a test that passes for the wrong reason, and it is invisible to code review
+because both halves look right in isolation.
+
+`tests/db/caption-gate-schedule.test.ts` closes it by going through the real entry point and
+asserting on the **persisted row**, not just on the thrown error. That distinction matters
+too: moving the gate to after the `updateMany` still satisfies `rejects.toThrow`, and only
+the `expect(await statusOf(targetId)).toBe('DRAFT')` assertion catches it. Both mutations
+were measured — removing the call kills 4 tests, moving it after the write kills 3.
+
+**The rule:** when you add a guard at a call site, mutate the *call site*, not the guard.

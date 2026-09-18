@@ -94,13 +94,26 @@ PR 1 (the spine: schema, credentials, OAuth, X, pipeline, jobs) — landed:
 
 PR 2 (Meta family, health sweeps, Settings → Connections):
 
-- [ ] Expired tokens are refreshed via the correct credential; revoked accounts surface as
-      `REVOKED` — the adapter `refresh`/`validate` contract and the `REVOKED` → `BLOCKED`
-      publish path exist and are tested; the periodic sweep that calls them does not yet
-- [ ] Revoking a credential halts its jobs and marks dependent accounts
-- [ ] Meta adapters are complete and tested against faked responses
-- [ ] Every adapter gates captions through the **shared** `measureCaption` from
-      `modules/template/platform-spec`, never a raw `.length`
+- [x] Expired tokens are refreshed via the correct credential; revoked accounts surface as
+      `REVOKED` — the hourly `account.health` cron now drives `refresh`/`validate`
+      (`jobs/handlers/health.handlers.ts` → `modules/publish/health.service.ts`)
+- [x] Revoking a credential halts its jobs and marks dependent accounts —
+      `modules/publish/revocation.service.ts`, exposed at
+      `POST /api/workspaces/:workspaceId/credentials/:credentialId/revoke`
+- [x] Meta adapters are complete and tested against faked responses — `modules/publish/meta/`,
+      driven by `graph.fake.ts`, which throws on any request it was not scripted for
+- [x] Every adapter gates captions through the **shared** `measureCaption` from
+      `modules/template/platform-spec`, never a raw `.length` — enforced by
+      `adapter.spec-drift.test.ts`
+- [x] Caption length is checked at **schedule** time, not only at publish time —
+      `modules/publish/caption-gate.ts`, called from `scheduleTargets`
+- [x] `PlatformSpec` has one home. `modules/template/platform-spec.ts` owns composition
+      values; `adapter.types.ts` keeps only adapter-only fields and composes the two via
+      `buildAdapterSpec`, whose `?: never` mapped type makes a re-duplicated field a
+      compile error rather than a drift
+- [x] `Settings → Connections` shows per-account health and the revoke path —
+      `frontend/src/routes/settings/Connections.tsx`
+- [x] Runbooks — [`docs/runbooks/`](../runbooks/)
 
 ### Caption counting has one source of truth, and it is not the adapter
 

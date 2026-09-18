@@ -5,19 +5,24 @@ import type { AspectRatio, Platform } from '@prisma/client';
  *
  * ## Why this lives here and not in `modules/publish/`
  *
- * docs/08 puts `PlatformSpec` on the `PlatformAdapter`, which is W6's. That is the right
- * long-term home: the adapter knows what its API accepts, and a spec that disagrees with
- * the adapter publishing through it is worse than no spec.
+ * docs/08 originally put `PlatformSpec` on the `PlatformAdapter`, which is W6's, on the
+ * reasoning that the adapter knows what its API accepts.
  *
- * W5 ships before any adapter exists and needs the same facts for a screen that never
- * calls a platform API — a character count has to count against something. So this is a
- * deliberately *narrow* read-only table of composer-facing fields only: no auth, no
- * scopes, no capability model, nothing an adapter would own.
+ * That turned out to be the wrong way round, and there is a shipped bug to prove it. The
+ * composer counts a caption *here* and the publisher gated on the adapter's own copy;
+ * they disagreed, so the product previewed "233/280, fits" and then refused the identical
+ * text at publish time — on any caption containing a link, which is most of them.
  *
- * **W6 should absorb this.** When `PlatformAdapter` lands the adapter becomes the source
- * of truth and this file should be reduced to re-exporting from it. It sits in
- * `template/` rather than `publish/` purely so both workstreams do not create
- * `modules/publish/platform-spec.ts` in parallel and collide.
+ * The lesson is not "put it on the adapter" or "put it in the UI" but **have one**. This
+ * file is that one. As of W6 PR 2, `modules/publish/adapter.types.ts` derives its
+ * `PlatformSpec` from this table via `buildAdapterSpec`, adding only the three fields the
+ * composer has no use for (`maxMediaCount`, `supportsScheduling`, `requiredScopes`). An
+ * adapter cannot restate a value below — the builder's signature rejects it.
+ *
+ * **So this file is not a placeholder to be absorbed.** An earlier version of this comment
+ * told W6 to move it into `publish/`; do not do that. Moving it there puts the numbers the
+ * composer depends on behind the publishing module, and the composer must not have to
+ * import an adapter to draw a character counter.
  *
  * ## Provenance
  *
