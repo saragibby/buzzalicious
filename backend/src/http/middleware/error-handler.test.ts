@@ -139,16 +139,29 @@ describe('errorHandler and schema validation', () => {
     // `details` is returned to the client, so this conversion is an exposure path that did
     // not exist before. docs/10 is absolute that a credential secret is never returned
     // "not even to the client that sent it" — and a body carrying one can certainly fail
-    // validation. Only `path`, `code` and Zod's own message are mapped; `received` is
-    // deliberately dropped, and no secret field is an enum or literal, which are the only
-    // Zod issue kinds whose message embeds the value.
-    const secretish = z.object({ appSecret: z.string().max(5) }).strict();
+    // validation.
+    //
+    // Deliberately exercised through an **enum** field. Most Zod issues (`too_big`,
+    // `invalid_type`) never carry the offending value at all, so a test built on one of
+    // those passes no matter what this code maps — it asserts a property of Zod, not of
+    // us. `invalid_enum_value` is one of the few kinds that does carry the raw value, so
+    // it is the only shape that can actually catch us forwarding `received`.
+    const withEnum = z.object({ mode: z.enum(['CLIENT_APP', 'DIRECT_TOKEN']) }).strict();
     const response = await request(
-      appThrowing(secretish.safeParse({ appSecret: 'super-secret-token' }).error),
+      appThrowing(withEnum.safeParse({ mode: 'super-secret-token' }).error),
     ).get('/boom');
 
     expect(response.status).toBe(400);
-    expect(response.body.error.details.issues[0].path).toBe('appSecret');
+    expect(response.body.error.details.issues[0]).toMatchObject({
+      path: 'mode',
+      code: 'invalid_enum_value',
+    });
+
+    // Positive control: Zod really did capture the value, so the absence below is this
+    // code dropping it rather than Zod never having had it.
+    const raw = withEnum.safeParse({ mode: 'super-secret-token' });
+    expect(JSON.stringify(raw.error?.issues)).toContain('super-secret-token');
+
     expect(JSON.stringify(response.body)).not.toContain('super-secret-token');
   });
 });

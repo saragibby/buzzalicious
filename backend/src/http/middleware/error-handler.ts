@@ -1,5 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
-import { ZodError } from 'zod';
+import { ZodError, type ZodIssue } from 'zod';
 import { getLogger } from '../../platform/logger';
 import {
   NotFoundError,
@@ -34,11 +34,42 @@ export const notFoundHandler: RequestHandler = (req, _res, next) => {
  * Converted rather than special-cased downstream so `statusFor`/`toErrorBody` stay
  * Zod-free and every existing exposure rule continues to apply unchanged.
  *
- * `issues` is safe to expose: it names the offending paths and why they failed, which is
- * exactly what the client needs to fix the call, and it carries only what the client
- * already sent. `message` is deliberately generic rather than Zod's default, which
- * stringifies the whole issue array into a wall of JSON.
+ * ## What may be said back
+ *
+ * `issues` names the offending path and why it failed, which is what the client needs to
+ * fix the call. What it must **not** do is echo the rejected value: docs/10 is absolute
+ * that a credential secret is never returned, "not even to the client that sent it", and
+ * a body carrying one can certainly fail validation.
+ *
+ * `received` is therefore never forwarded — and neither is Zod's own `message` for the
+ * issue kinds that embed the value in their prose. `invalid_enum_value` renders as
+ * `... received 'super-secret-token'`, so for those kinds the message is replaced with one
+ * built only from what *we* declared. The allowed options are ours to disclose; the
+ * submitted value is not.
+ *
+ * The outer `message` is generic rather than Zod's default, which stringifies the whole
+ * issue array into a wall of JSON.
  */
+
+/**
+ * Issue kinds whose `message` interpolates the value the client sent. Everything else in
+ * Zod describes the *expectation* ("Expected string, received number" names the type, not
+ * the value) and is safe to pass through verbatim.
+ */
+const VALUE_BEARING_CODES = new Set(['invalid_enum_value', 'invalid_literal']);
+
+function safeMessage(issue: ZodIssue): string {
+  if (!VALUE_BEARING_CODES.has(issue.code)) return issue.message;
+
+  if (issue.code === 'invalid_enum_value') {
+    // `options` are the values this API declares, so disclosing them is intentional — it
+    // is the same information as the API docs, and it is what makes the error actionable.
+    return `Expected one of: ${issue.options.map((option) => String(option)).join(', ')}.`;
+  }
+
+  return 'That value is not one this field accepts.';
+}
+
 function normalize(error: unknown): unknown {
   if (!(error instanceof ZodError)) return error;
 
@@ -47,7 +78,7 @@ function normalize(error: unknown): unknown {
       issues: error.issues.map((issue) => ({
         path: issue.path.join('.'),
         code: issue.code,
-        message: issue.message,
+        message: safeMessage(issue),
       })),
     },
     cause: error,
