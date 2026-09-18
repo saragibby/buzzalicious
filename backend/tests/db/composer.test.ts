@@ -245,21 +245,23 @@ describe.skipIf(!hasTestDatabase)('composer backend', () => {
      * There is no second shape to write a fixture for.
      */
     it('will not let another workspace rewrite a caption through the target relation', async () => {
-      const draft = await createDraft(rise, RISE.brandId, {
-        templateSlug: 'big-number',
-        platforms: ['INSTAGRAM'],
-      });
-      await updateDraft(rise, draft.id, { captionOverrides: { INSTAGRAM: 'ours' } });
+      const draft = await createDraft(rise, RISE.brandId, { templateSlug: 'big-number' });
+
+      // Whichever platforms the brand targets; the rule under test is the same for all of
+      // them, and hard-coding one would couple this to the seed's platform choices.
+      const platform = draft.targets[0]?.platform;
+      expect(platform).toBeDefined();
+
+      await updateDraft(rise, draft.id, { captionOverrides: { [platform]: 'ours' } });
 
       // The scoped client is the only thing standing between these two workspaces.
       const stolen = await taxdedux.postTarget.updateMany({
-        where: { postId: draft.id, platform: 'INSTAGRAM' },
+        where: { postId: draft.id, platform },
         data: { caption: 'stolen' },
       });
 
       const after = await getDraft(rise, draft.id);
-      const instagram = after.targets.find((target) => target.platform === 'INSTAGRAM');
-      expect(instagram?.caption).toBe('ours');
+      expect(after.targets.find((target) => target.platform === platform)?.caption).toBe('ours');
 
       // Secondary: the write should have matched nothing at all, not merely failed to
       // change the value.
@@ -267,9 +269,9 @@ describe.skipIf(!hasTestDatabase)('composer backend', () => {
 
       // Positive control — the owner *can* do what the other tenant could not, so the
       // assertion above cannot pass because captions are simply unwritable.
-      await updateDraft(rise, draft.id, { captionOverrides: { INSTAGRAM: 'ours, edited' } });
+      await updateDraft(rise, draft.id, { captionOverrides: { [platform]: 'ours, edited' } });
       const edited = await getDraft(rise, draft.id);
-      expect(edited.targets.find((t) => t.platform === 'INSTAGRAM')?.caption).toBe('ours, edited');
+      expect(edited.targets.find((t) => t.platform === platform)?.caption).toBe('ours, edited');
 
       await deleteDraft(rise, draft.id);
     });
