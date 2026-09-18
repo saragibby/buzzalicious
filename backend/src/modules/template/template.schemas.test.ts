@@ -80,9 +80,10 @@ describe('TemplateLayoutSchema', () => {
   it('rejects a style binding with a typo', () => {
     // This is the whole point of validating bindings: an unresolvable binding renders as
     // nothing, so the image publishes with a missing background rather than failing.
-    const broken = structuredClone(layout) as Record<string, never>;
-    (broken.root as unknown as { style: Record<string, string> }).style.background =
-      '$brand.palete.background';
+    const broken = structuredClone(layout) as unknown as {
+      root: { style: Record<string, string> };
+    };
+    broken.root.style.background = '$brand.palete.background';
     expect(TemplateLayoutSchema.safeParse(broken).success).toBe(false);
   });
 

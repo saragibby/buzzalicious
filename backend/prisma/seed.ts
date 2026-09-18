@@ -1,51 +1,35 @@
-import { PrismaClient } from '@prisma/client';
+import { disconnectPrisma, getPrisma } from '../src/platform/db';
+import { getLogger } from '../src/platform/logger';
+import { seedAll } from './seed/index';
 
-const prisma = new PrismaClient();
+/**
+ * `npm run db:seed` — CLI entry point.
+ *
+ * The seed goes through the ordinary application client, not a bare `PrismaClient`, so it
+ * exercises the encryption extension exactly as the app does. A seed that wrote plaintext
+ * tokens straight to the columns would produce a database the app cannot read, and would
+ * do it silently.
+ *
+ * The seeding itself lives in `seed/index.ts` as `seedAll(db)` so tests can run it against
+ * their own client without shelling out.
+ */
+async function main(): Promise<void> {
+  const logger = getLogger().child({ component: 'seed' });
+  const started = Date.now();
 
-async function main() {
-  console.log('🌱 Starting database seed...');
+  const summary = await seedAll(getPrisma());
 
-  // Create sample user
-  const user = await prisma.user.upsert({
-    where: { email: 'demo@buzzalicious.com' },
-    update: {},
-    create: {
-      email: 'demo@buzzalicious.com',
-      name: 'Demo User',
-    },
-  });
-
-  console.log('✅ Created user:', user);
-
-  // Create sample templates
-  const template1 = await prisma.template.create({
-    data: {
-      name: 'Welcome Email',
-      purpose: 'Send welcome messages to new users',
-      userId: user.id,
-    },
-  });
-
-  console.log('✅ Created template:', template1);
-
-  const template2 = await prisma.template.create({
-    data: {
-      name: 'Newsletter',
-      purpose: 'Monthly newsletter template for updates',
-      userId: user.id,
-    },
-  });
-
-  console.log('✅ Created template:', template2);
-
-  console.log('🎉 Database seeded successfully!');
+  logger.info(
+    { ...summary, durationMs: Date.now() - started },
+    'Seed complete. Re-running is safe: every row is upserted on a derived id.',
+  );
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Error seeding database:', e);
-    process.exit(1);
+  .catch((error: unknown) => {
+    getLogger().child({ component: 'seed' }).error({ err: error }, 'Seed failed');
+    process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnectPrisma();
   });
