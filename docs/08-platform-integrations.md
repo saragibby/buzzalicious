@@ -110,9 +110,46 @@ implement publishing first, and expect metrics coverage to be thinner.
   posting limits and metrics availability differ by tier and a lower tier silently
   degrades the outcome spine.
 - The existing prototype already posts successfully via `twitter-api-v2` using OAuth 1.0a.
-  That code is the starting point ([03](./03-teardown.md)).
+  That code is the starting point ([03](./03-teardown.md)), and the handshake is captured
+  verbatim in [`reference/x-oauth1a.md`](./reference/x-oauth1a.md).
 - Media upload is a separate step from posting — implement media upload before assuming
-  image posts work.
+  image posts work. Concretely: **upload is `client.v1.uploadMedia`, posting is
+  `client.v2.tweet`** — two API versions in one client. Maximum four images per post.
+
+### Client setup — what a BYO client must do
+
+Under [ADR-0009](./adr/0009-byo-platform-credentials.md) the client owns the X app, so
+these are onboarding instructions to hand them, not steps we perform. Verify against the
+current X developer documentation before publishing them to a client — tier names and
+permission labels change.
+
+1. Create a project and an app in the X developer portal.
+2. Enable **OAuth 1.0a** under the app's user authentication settings.
+3. Set app permissions to **Read and Write**. The default is read-only, and posting with
+   it fails as `Read-only application cannot POST` — a message that does not mention
+   permissions.
+4. Register the callback URL. We give the client a **single canonical URL**
+   (`https://<app-domain>/auth/x/callback`) that they register once; see
+   [10 — Credentials & security](./10-credentials-and-security.md).
+5. Confirm the access tier permits posting and the metrics we need. A write-capable tier
+   is not free, and a lower tier degrades the outcome spine silently rather than loudly.
+6. Hand over the **API key** and **API secret** (consumer key/secret) through the
+   write-only credential fields. They are encrypted at rest and never returned by the API.
+
+### Failure modes worth pre-empting in the capability report
+
+| Symptom | Cause |
+|---------|-------|
+| `Read-only application cannot POST` | App permissions never changed from the read-only default |
+| `403 Forbidden` on publish | Access tier does not include write |
+| `Invalid or expired token` | User revoked access — OAuth 1.0a tokens do not expire on their own |
+| `Status is a duplicate` | X rejects identical text posted twice. Relevant to retries: **a retry of a successful-but-unacknowledged post looks like a duplicate**, so the idempotency key matters here specifically |
+
+### Rate limits
+
+X enforces per-window posting limits that vary by tier. Publishing must treat a
+rate-limit response as retryable with backoff (`RateLimitError`), not as a failure —
+see the error taxonomy below.
 
 ## Adapter interface
 

@@ -27,9 +27,12 @@ If you are an agent or engineer picking up work here, read in this order:
 | 09 | [Open questions](./09-open-questions.md) | Unresolved decisions, with owners |
 | 10 | [Credentials & security](./10-credentials-and-security.md) | How client platform credentials are held and used |
 | 11 | [Source material](./11-source-material.md) | What to port from Rise & Shore and Tax Dedux |
+| 12 | [Testing](./12-testing.md) | How to run and write tests, including DB-backed ones |
 
 Decision records live in [`adr/`](./adr/). Agent-ready task briefs live in
-[`tasks/`](./tasks/).
+[`tasks/`](./tasks/). Knowledge harvested from the deleted prototype — OAuth sequencing,
+platform quirks, redirect handling — lives in [`reference/`](./reference/README.md) and is
+clearly marked as dead code.
 
 ## The one-paragraph version
 

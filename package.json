@@ -1,27 +1,53 @@
 {
   "name": "buzzalicious",
   "version": "1.0.0",
-  "description": "Full-stack TypeScript application with React frontend and Express backend",
+  "description": "Template- and trend-driven content platform for small businesses and marketers",
   "private": true,
   "workspaces": [
     "frontend",
     "backend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build:frontend && npm run build:backend",
     "build:backend": "npm run build --workspace=backend",
     "build:frontend": "npm run build --workspace=frontend",
     "start": "npm run start --workspace=backend",
+    "start:worker": "npm run start:worker --workspace=backend",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "type-check": "npm run type-check --workspace=backend && npm run type-check --workspace=frontend",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:push": "npm run db:push --workspace=backend",
+    "db:deploy": "npm run db:deploy --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend",
     "heroku-postbuild": "npm run build"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@eslint/js": "^9.17.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/supertest": "^6.0.2",
+    "concurrently": "^8.2.2",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "globals": "^15.14.0",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.4.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vitest": "^2.1.8"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }
