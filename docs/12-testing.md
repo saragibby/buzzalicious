@@ -586,3 +586,47 @@ W7's note on why the second is stronger: NOMATCH detection is per-mutation, but 
 byte-comparison makes a no-op mutation *inexpressible*. It also catches the duplicate-key
 trap recorded above — where the bytes genuinely do change and the mutation is still a
 no-op — which a NOMATCH check alone would miss entirely.
+
+## A correct guard downstream conceals an incorrect input upstream
+
+Every earlier entry here is a defect in an *assertion* — missing, vacuous, or tautological.
+This one is different, and W8 found it in its own work: the assertions were fine and the
+mutation still survived.
+
+W8 mutated its send-time search to **start from the UTC date instead of the brand's local
+date**. Seven DST tests stayed green.
+
+The reason is that a downstream guard was already deciding the outcome. The search rejects
+any candidate slot in the past — `instant >= from`. A wrong start date therefore only ever
+skips candidates that would have been rejected anyway, which is to say it is invisible
+almost everywhere. The two implementations diverge in exactly one window: after the UTC
+date has rolled over, but before a slot later *today, local time* has passed.
+
+Denver at `2026-03-08T00:00:00Z` is Saturday **March 7, 17:00 MST** — UTC date `03-08`,
+local date `03-07`. A `weekend:evening` slot at 20:00 local is still ahead (`03:00Z`).
+The correct implementation offers tonight; the mutant offers tomorrow night. A suggestion
+a full day late, and entirely plausible on its face.
+
+The general rule, which is the part worth keeping:
+
+> Mutating an input is only meaningful in the window where the downstream filter is not
+> already deciding the outcome. A surviving mutation is not automatically a missing
+> assertion — first ask what downstream check is absorbing it.
+
+That question is the new step. When a mutation survives, the reflex is to look for the
+assertion that should have caught it; the better first move is to find what made the
+mutated value *stop mattering*, because that also tells you the one window where it still
+does. W8's new test uses exactly that window, and its positive control falls out of the
+same instant for free: `weekend:afternoon` (16:00 local, already past) **must** roll
+forward, so an implementation that merely reaches back a day fails too.
+
+### Why this is the `effectiveCaption` shape again
+
+It is the same structure as the publish bug in W7's segment: the caption gate used
+`effectiveCaption` correctly and approved the inherited copy, and the publisher then
+shipped `''`. The path that was right concealed the path that was wrong.
+
+Two code paths that must agree about one value, where the compliant one runs first and
+absorbs the evidence. Worth naming as a family, because the instinct in both cases is to
+trust the green result — and in both cases the green result was reporting on the guard,
+not on the thing being guarded.
