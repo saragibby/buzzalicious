@@ -27,7 +27,7 @@ const PREVIEW = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg"><text>rendered</text></svg>',
   width: 1080,
   height: 1080,
-  overflows: [],
+  overflows: [{ slot: 'stat', message: 'is too long for this size.' }],
   fittedDown: [],
 };
 
@@ -105,6 +105,12 @@ describe('LivePreview', () => {
     await waitFor(() =>
       expect(container.querySelector('.composer-preview-svg')).toBeInTheDocument(),
     );
+
+    // Positive control for the overflow list, so the "it is gone" assertion in the error
+    // test below cannot pass just because the list never renders at all.
+    expect(screen.getByRole('list', { name: 'Text that does not fit' })).toHaveTextContent(
+      /too long for this size/,
+    );
   });
 
   it('replaces a failed render with an error rather than leaving the old image up', async () => {
@@ -137,9 +143,19 @@ describe('LivePreview', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/does not fit/));
 
-    // The important half: the previous image is gone. Showing it under an error would be
-    // a silent lie about what the post looks like.
+    // The important half: the previous render is gone — both the image and the advice
+    // derived from it. Showing either under an error would be a silent lie about what the
+    // post looks like.
+    //
+    // Note that the image alone is defended twice over: `setPreview(null)` in the catch,
+    // and the JSX preferring `error` to `preview`. Mutating either one alone leaves the
+    // image correctly hidden, so neither is individually observable through the image.
+    // The overflow list below is the assertion that makes the state reset load-bearing,
+    // because it renders off `preview` without consulting `error`.
     expect(container.querySelector('.composer-preview-svg')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Text that does not fit' }),
+    ).not.toBeInTheDocument();
   });
 
   it('surfaces a network failure in words the user can act on', async () => {
