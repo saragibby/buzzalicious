@@ -3,11 +3,7 @@ import type { ScopedDb } from '../../platform/tenancy';
 import { generateTextMetered, type MeteringClient } from '../ai/metered';
 import { BrandVoiceGuideSchema, type BrandVoiceGuide } from '../brand/brand.schemas';
 import { SlotSchemaSchema, SlotValuesSchema } from '../template/template.schemas';
-import {
-  isSupportedPlatform,
-  specFor,
-  type SupportedPlatform,
-} from '../template/platform-spec';
+import { isSupportedPlatform, specFor, type SupportedPlatform } from '../template/platform-spec';
 import { LINK_MARKER, type GenerateCaptionInput } from './post.schemas';
 
 /**
@@ -103,7 +99,13 @@ export async function generateCaption(
     include: {
       template: { select: { slotSchema: true, archetype: true } },
       brand: {
-        select: { id: true, name: true, workspaceId: true, voiceGuide: true, targetPlatforms: true },
+        select: {
+          id: true,
+          name: true,
+          workspaceId: true,
+          voiceGuide: true,
+          targetPlatforms: true,
+        },
       },
     },
   });
@@ -194,7 +196,10 @@ function resolvePlatform(
  * clicks are never attributed. Cheap to normalise here; expensive to discover live.
  */
 export function enforceLinkMarker(caption: string, wanted: boolean): string {
-  const normalised = caption.replace(/\{\{\s*link\s*\}\}|\{\s*link\s*\}|\[\s*link\s*\]/gi, LINK_MARKER);
+  const normalised = caption.replace(
+    /\{\{\s*link\s*\}\}|\{\s*link\s*\}|\[\s*link\s*\]/gi,
+    LINK_MARKER,
+  );
 
   if (!wanted) return normalised;
 

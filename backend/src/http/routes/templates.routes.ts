@@ -70,9 +70,7 @@ function platformRatios(value: string | undefined): AspectRatio[] | undefined {
   if (platforms.length === 0) {
     // An unrecognised platform is a caller mistake, and silently returning the unfiltered
     // gallery would present templates as postable to a platform nobody checked.
-    throw new ValidationError(
-      `Unknown platform. Supported: ${SUPPORTED_PLATFORMS.join(', ')}`,
-    );
+    throw new ValidationError(`Unknown platform. Supported: ${SUPPORTED_PLATFORMS.join(', ')}`);
   }
 
   return ratiosForPlatforms(platforms);

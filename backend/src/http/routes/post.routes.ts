@@ -160,7 +160,11 @@ export function createPostRouter(): Router {
             'export failed after streaming began; destroying the response rather than ' +
               'letting a truncated zip look like a successful download',
           );
-          res.destroy(error instanceof Error ? error : new Error('export failed'));
+          // Not thrown: `destroy` needs an Error to abort the socket with, and the
+          // response is already committed so nothing can reach the error handler.
+          // eslint-disable-next-line no-restricted-syntax
+          const reason = error instanceof Error ? error : new Error('export failed');
+          res.destroy(reason);
           return;
         }
         next(error);

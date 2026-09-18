@@ -72,7 +72,9 @@ export function buildCaptionsFile(draft: DraftView): string {
     return [
       `## ${spec.label}`,
       `${count.used} / ${count.limit} characters` +
-        (count.over ? `  ⚠️  ${count.used - count.limit} over the limit — trim before posting` : ''),
+        (count.over
+          ? `  ⚠️  ${count.used - count.limit} over the limit — trim before posting`
+          : ''),
       spec.linkBehavior === 'bio-only' && caption.includes(LINK_MARKER)
         ? `⚠️  ${spec.label} does not make caption links clickable. Put the link in your bio.`
         : null,
@@ -84,11 +86,7 @@ export function buildCaptionsFile(draft: DraftView): string {
       .join('\n');
   });
 
-  return [
-    `# ${draft.title ?? draft.templateName ?? 'Untitled post'}`,
-    '',
-    ...sections,
-  ].join('\n');
+  return [`# ${draft.title ?? draft.templateName ?? 'Untitled post'}`, '', ...sections].join('\n');
 }
 
 function buildReadme(draft: DraftView, summary: { files: string[] }): string {

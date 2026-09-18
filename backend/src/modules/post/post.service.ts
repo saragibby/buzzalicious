@@ -131,7 +131,9 @@ export async function createDraft(
       mediaType: 'IMAGE',
       // Seeded from the brand's declared targets so the composer opens on the platforms
       // this brand actually posts to, rather than on all four for everyone.
-      targets: { create: supportedTargetsOf(brand.targetPlatforms).map((platform) => ({ platform })) },
+      targets: {
+        create: supportedTargetsOf(brand.targetPlatforms).map((platform) => ({ platform })),
+      },
     },
     include: draftInclude,
   });

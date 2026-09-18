@@ -8,10 +8,12 @@ import { Login } from './routes/Login';
 import { TrendFeed } from './routes/trends/TrendFeed';
 import { TrendCurate } from './routes/trends/TrendCurate';
 import { UsageAdmin } from './routes/admin/UsageAdmin';
-import { Calendar, Composer, Dashboard, Insights, NotFound, Settings } from './routes/Placeholder';
+import { Calendar, Dashboard, Insights, NotFound, Settings } from './routes/Placeholder';
+import { TemplateGallery } from './routes/composer/TemplateGallery';
+import { Composer } from './routes/composer/Composer';
 
 /**
- * The routing shell. Structure only — W5 builds the real UI.
+ * The routing shell.
  *
  * This replaces the prototype's `useState` tab index, which meant no URL was shareable,
  * the back button did nothing, and a refresh always dropped the user on tab zero.
@@ -54,11 +56,15 @@ export function App() {
                 PLATFORM_ADMIN_EMAILS, and a link everyone can see but nobody can open is
                 worse than no link. */}
             <Route path="admin/usage" element={<UsageAdmin />} />
-            <Route path="composer" element={<Composer />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="insights" element={<Insights />} />
             <Route path="brand" element={<BrandKit />} />
             <Route path="settings" element={<Settings />} />
+            {/* W5. The gallery is the entry point and the composer is a draft by id, so
+                a half-finished post is a URL someone can bookmark or send to a colleague
+                — which a single /composer screen holding its state in memory is not. */}
+            <Route path="composer" element={<TemplateGallery />} />
+            <Route path="composer/:postId" element={<Composer />} />
           </Route>
           <Route path="/404" element={<NotFound />} />
           <Route path="*" element={<Navigate to="/404" replace />} />

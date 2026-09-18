@@ -87,6 +87,43 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return payload as T;
 }
 
+/**
+ * Like `apiFetch`, but returns the raw `Response` on success.
+ *
+ * Exists for the export bundle, which is a zip. `apiFetch` calls `response.json()` on
+ * every success and would throw on binary — the download would fail with a JSON parse
+ * error that says nothing about downloads.
+ *
+ * The failure path is deliberately identical: a failure *before* the stream starts is an
+ * ordinary API error with a message naming the empty slot, and the user should see that
+ * rather than "download failed".
+ */
+export async function apiFetchRaw(path: string, options: RequestOptions = {}): Promise<Response> {
+  const { body, headers, ...rest } = options;
+
+  const response = await fetch(`${getBackendUrl()}${path}`, {
+    ...rest,
+    credentials: 'include',
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...headers,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ApiErrorBody | null;
+    throw new ApiError(
+      response.status,
+      payload?.error?.code ?? 'UNKNOWN',
+      payload?.error?.message ?? response.statusText,
+      payload?.error?.requestId,
+    );
+  }
+
+  return response;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
