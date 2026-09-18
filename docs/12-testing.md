@@ -158,6 +158,63 @@ credentials plus shared ones" and is wrong: every sibling brand matches the shar
 and sees each other's in-flight rows. Prefer the row's **own** `brandId` when the child
 row has one, and write the test with two brands sharing one workspace-level credential.
 
+### Make the negative case prove itself
+
+The single most common way work has gone wrong on this project is **absence of evidence
+rendered as evidence of absence** — something stayed quiet, and the quiet was read as a
+pass. It has arrived in four different disguises, none of which looked like the others at
+the time:
+
+- **A probe that matched nothing.** A mutation applied with
+  `sed -i '' "0,/.../s//.../"` silently changed no bytes. "No error" was read as "the
+  code does not catch this", when the truth was "the mutation never ran".
+- **An assertion whose premise was never met.** A guard test written against a Zod
+  `too_big` issue, which never carries the submitted value. It passed no matter what the
+  code did. Rewritten against `invalid_enum_value` it failed immediately — and that
+  failure is the only reason a live value-echo leak was found.
+- **A comment asserting a property the code did not have.** `normalizeError`'s doc
+  comment claimed `details` "carries no received values", which was false. Worse than an
+  untested guard: an untested guard lets one bug through, a wrongly asserted one makes
+  every future reader stop checking.
+- **An empty probe output.** stdout captured nothing while checking whether rejected
+  values reach the logs. Empty output is equally consistent with "no leak" and "the probe
+  never observed the right stream", so it established nothing and the question stays open.
+
+In every one of the four, **the negative result was indistinguishable from a
+non-result**. That is the whole trap, and it gives the rule a form you can check on
+review rather than merely be warned by:
+
+> **A test or probe must be able to tell "this didn't happen" apart from "this didn't
+> run". If it cannot, its silence means nothing.**
+
+Ask it of any new assertion: *if the code under test were never reached at all, would
+this still be green?* If yes, it is not evidence yet.
+
+The defences are mechanical, and they are cheap:
+
+> **Every guard needs a positive control** — an assertion that fails if the fixture never
+> reached the code path. If a test would still pass against an empty table, a skipped
+> mutation, or an unreached branch, it is not testing anything.
+>
+> **Every tool must distinguish "clean" from "did nothing".** A mutation harness prints
+> `NOMATCH` and exits non-zero rather than reporting a clean run — the original bug was
+> that "applied nothing" and "applied cleanly" shared an exit code.
+>
+> **Observe the stream you actually mean, and prove you can see it.** To show a value
+> does *not* reach the logs, first assert a known sentinel **is** present on a known-good
+> path, then assert the suspect value is absent on the same captured **pino destination
+> stream** — not stdout. Without the known-good half you have only proved your probe is
+> quiet, which is what stdout capture already did.
+>
+> **Never let prose stand in for a test.** A claim about behaviour belongs in an
+> assertion; in prose only, it is unverified by construction. If it must stay prose, it
+> has to say plainly that it is unverified.
+
+This is the same root as the recurring "tests that pass for the wrong reason" trap, and
+it is why every new assertion on this project is mutation-tested: breaking the thing a
+test protects, and confirming it goes red, is the only evidence that the green was ever
+load-bearing.
+
 ## Conventions
 
 | Thing | Convention |
