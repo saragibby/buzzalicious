@@ -37,7 +37,32 @@ interface TemplateSpec {
   layout: TemplateLayout;
 }
 
+/**
+ * The ratios a template supports unless it says otherwise.
+ *
+ * 16:9 is included: W4 verified every template here compiles and renders at 1200x675
+ * without overflow, and leaving it out meant the platform had no landscape coverage at
+ * all despite the renderer supporting four ratios. Templates whose composition genuinely
+ * does not survive landscape — the five-step checklist, the before/after split — list
+ * their ratios explicitly rather than using this.
+ */
 const ALL_RATIOS: AspectRatio[] = [
+  AspectRatio.SQUARE_1_1,
+  AspectRatio.PORTRAIT_4_5,
+  AspectRatio.STORY_9_16,
+  AspectRatio.LANDSCAPE_16_9,
+];
+
+/**
+ * Everything except landscape.
+ *
+ * 16:9 is only 675px tall, and a template built around a long block of body copy cannot
+ * fit its own `maxLength` there at a readable size — verified by rendering each template
+ * at max-length input across all four ratios. These are excluded from landscape rather
+ * than having their `$fit` minimums lowered, because a 24px pull quote is not a smaller
+ * version of the design, it is a different and worse one.
+ */
+const NO_LANDSCAPE: AspectRatio[] = [
   AspectRatio.SQUARE_1_1,
   AspectRatio.PORTRAIT_4_5,
   AspectRatio.STORY_9_16,
@@ -386,7 +411,7 @@ export const TEMPLATES: TemplateSpec[] = [
     description: 'A customer quote with attribution, set large.',
     archetype: 'testimonial',
     kind: TemplateKind.IMAGE,
-    ratios: ALL_RATIOS,
+    ratios: NO_LANDSCAPE,
     tags: [
       { category: 'hospitality-and-travel', weight: 1 },
       { category: 'professional-services', weight: 0.9 },
@@ -575,7 +600,7 @@ export const TEMPLATES: TemplateSpec[] = [
     description: 'A question set large, designed to be answered in the comments.',
     archetype: 'question-hook',
     kind: TemplateKind.IMAGE,
-    ratios: ALL_RATIOS,
+    ratios: NO_LANDSCAPE,
     tags: [
       { category: 'health-and-wellness', weight: 0.8 },
       { category: 'professional-services', weight: 0.8 },

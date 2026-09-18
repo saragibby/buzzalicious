@@ -155,14 +155,27 @@ Recommendation: **hand-build**, informed by Google Business categories.
 
 **Affects:** W2 seed data.
 
-### Q9 — Emoji rendering in Satori
+### Q9 — Emoji rendering in Satori — ✅ resolved (W4)
 
-Satori needs an explicit strategy — an emoji font buffer or a `graphemeImages` mapping.
-Small business captions are full of emoji, so this will surface immediately.
+**Resolved: vendored Twemoji SVGs, substituted as images via Satori's
+`loadAdditionalAsset` hook.** Assets are committed at a pinned tag, so no render touches
+the network. A colour emoji font was rejected because Satori cannot draw CBDT/sbix/COLR
+tables; CDN fetching was rejected because it breaks ADR-0002's determinism requirement and
+puts a round trip inside the 300ms budget.
 
-Decide during W4 step 2, not after templates are authored.
+Two findings worth carrying forward:
 
-**Affects:** W4.
+- **Supply chain.** `twitter/twemoji` is archived; the continuation is `jdecked/twemoji`.
+  On npm, `@twemoji/api` is genuine but ships no SVG assets, and `@twemoji/svg` is an
+  **unaffiliated repackage that relicenses the artwork as MIT**. Neither is used — the
+  bundle is built from the `jdecked` release tarball.
+- **Attribution is required.** The graphics are **CC-BY 4.0** (the code is MIT).
+  `backend/assets/emoji/NOTICE.md` carries it, and **the obligation still needs to reach
+  the product's public-facing credits before launch** — that part is not W4's to place.
+
+Full reasoning in [docs/05](./05-template-engine.md#emoji).
+
+**Affects:** W4 (done), plus a launch checklist item for public attribution.
 
 ### Q10 — Product name
 
@@ -251,14 +264,25 @@ composer, publish pipeline, and export must tolerate zero renditions from day on
 is exactly what makes plain X and Threads posts work in v1, and it's a case that's easy to
 break if every path assumes an image exists.
 
-### Q19 — Font licensing for Satori
+### Q19 — Font licensing for Satori — partially answered (W4)
 
 Satori requires font files embedded server-side. Many fonts — including much of Google
 Fonts — are fine for this, but not all, and "we shipped a font we didn't have rights to" is
 a real legal exposure that is cheap to avoid and expensive to unwind.
 
-W4 must pick a curated set with verified licenses. Also settle emoji ([Q9](#q9--emoji-rendering-in-satori)),
-which is a separate licensing question.
+**W4's curated set is all SIL OFL 1.1** — Inter, Fraunces, Playfair Display, Space Grotesk
+and Bebas Neue. OFL permits embedding, redistribution and server-side rasterization with
+no attribution obligation in the output, and each family's `OFL.txt` ships beside it. A
+test asserts the licence field, so adding an encumbered family fails CI. Nothing currently
+vendored looks encumbered.
+
+**Still open, and not W4's to settle:** the general policy. Specifically, what happens when
+(a) a client asks for a brand font that is not OFL, and (b) custom brand font upload ships
+post-v1 — at which point the platform is hosting and embedding files it did not choose, and
+needs an answer about who warrants the rights.
+
+Emoji licensing is settled separately under [Q9](#q9--emoji-rendering-in-satori), and it
+*does* carry an attribution obligation.
 
 ### Q20 — AI provider and spend controls — **RESOLVED: meter now, cap as a fuse**
 

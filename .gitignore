@@ -144,3 +144,9 @@ vite.config.ts.timestamp-*
 # Local object storage (STORAGE_DRIVER=local). Development only — Heroku's filesystem
 # is ephemeral, so production uses R2.
 .storage/
+
+# Visual smoke output from `npm run render:sample`
+backend/.render-samples/
+
+# Visual smoke output from `npm run render:sample`
+backend/.render-samples/
