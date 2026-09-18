@@ -276,6 +276,26 @@ export interface ClickHour {
  * day it was written and then drift silently, since both copies would keep returning
  * plausible histograms.
  *
+ * It lives in `modules/link` because this module owns `LinkClick` queries: AGENTS.md's
+ * layering rule is that modules talk through exported service functions rather than
+ * reaching into another module's Prisma queries. (It is *not* here to share a bot filter.
+ * There is no shared filter — this reads the persisted `isBot` column, which the write
+ * path set. Recording the real reason because a correct decision resting on a wrong
+ * justification is one discovery away from being undone.)
+ *
+ * ## Scoped to one brand, not one workspace
+ *
+ * `Workspace.brands` is one-to-many, and this takes a single brand's `timeZone`. Scoping
+ * only to the workspace would return every brand's clicks and bucket them all into
+ * whichever brand's local hours happened to be passed in — so two brands in one workspace
+ * would receive identical send-time advice, derived partly from an audience that is not
+ * theirs, and at least one of them bucketed in the wrong zone.
+ *
+ * That is the same self-contamination the archetype scorer refuses, arriving through a
+ * different door. It is invisible at one brand per workspace, which is every fixture and
+ * both real clients today, so it is pinned by a deliberate two-brand test rather than left
+ * to be discovered as advice that is merely mediocre.
+ *
  * Bot clicks are counted separately and never folded in, for the same reason `clicksByDay`
  * separates them: link-preview crawlers hit every short link at publish time, so
  * unfiltered they would pile up in whatever hour the brand publishes and the send-time
@@ -283,11 +303,17 @@ export interface ClickHour {
  */
 export async function clicksByLocalHour(
   db: ScopedDb,
+  brandId: string,
   window: ClickWindow,
   timeZone: string,
 ): Promise<ClickHour[]> {
   const clicks = await db.linkClick.findMany({
-    where: { occurredAt: { gte: window.from, lte: window.to } },
+    where: {
+      occurredAt: { gte: window.from, lte: window.to },
+      // `ShortLink.brandId` is a direct column with an index on `[brandId, createdAt]`,
+      // so this is a nested filter rather than a join up through Post.
+      shortLink: { brandId },
+    },
     select: { occurredAt: true, isBot: true },
   });
 
