@@ -151,9 +151,9 @@ export function compileLayout(input: CompileInput): CompileResult {
     const text = resolveContent(node.content, context);
     const family = familyOf(style, input.brand);
     const weight = nearestWeight(family, Number(style.fontWeight ?? 400));
-    const lineHeight = typeof style.lineHeight === 'number' ? style.lineHeight : DEFAULT_LINE_HEIGHT;
-    const letterSpacing =
-      typeof style.letterSpacing === 'number' ? style.letterSpacing : undefined;
+    const lineHeight =
+      typeof style.lineHeight === 'number' ? style.lineHeight : DEFAULT_LINE_HEIGHT;
+    const letterSpacing = typeof style.letterSpacing === 'number' ? style.letterSpacing : undefined;
 
     const fit = parseFit(node.style?.fontSize);
     let fontSize: number;
@@ -172,9 +172,7 @@ export function compileLayout(input: CompileInput): CompileResult {
       if (result.overflowPx > 0) {
         overflows.push({
           node: node.id ?? node.content,
-          slot: node.content.startsWith('$slot.')
-            ? node.content.slice('$slot.'.length)
-            : undefined,
+          slot: node.content.startsWith('$slot.') ? node.content.slice('$slot.'.length) : undefined,
           overflowPx: result.overflowPx,
           minFontSize: scaleValue(fit.min, canvasWidth),
         });
@@ -193,9 +191,7 @@ export function compileLayout(input: CompileInput): CompileResult {
       if (measured.height > frame.height) {
         overflows.push({
           node: node.id ?? node.content,
-          slot: node.content.startsWith('$slot.')
-            ? node.content.slice('$slot.'.length)
-            : undefined,
+          slot: node.content.startsWith('$slot.') ? node.content.slice('$slot.'.length) : undefined,
           overflowPx: measured.height - frame.height,
         });
       }
@@ -250,7 +246,10 @@ export function compileLayout(input: CompileInput): CompileResult {
     };
   };
 
-  const root = compileNode(input.layout.root, { width: canvasWidth, height: Math.round(box.height * scale) });
+  const root = compileNode(input.layout.root, {
+    width: canvasWidth,
+    height: Math.round(box.height * scale),
+  });
 
   return {
     element: wrapInCanvas(root, input.aspectRatio, input.layout, scale),
@@ -265,7 +264,10 @@ function familyOf(style: Record<string, unknown>, brand: BrandKit): string {
 
   // `$brand.typography.*Family` already resolved to a quoted fallback list; the first
   // entry is the family whose metrics apply.
-  const first = raw.split(',')[0].trim().replace(/^["']|["']$/g, '');
+  const first = raw
+    .split(',')[0]
+    .trim()
+    .replace(/^["']|["']$/g, '');
   return first;
 }
 

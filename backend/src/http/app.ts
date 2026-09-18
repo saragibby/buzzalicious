@@ -11,6 +11,7 @@ import { createAuthRouter } from './routes/auth.routes';
 import { createBrandRouter, multerErrorHandler } from './routes/brand.routes';
 import { createHealthRouter } from './routes/health.routes';
 import { createFilesRouter, shouldMountFilesRouter } from './routes/files.routes';
+import { createTemplatesRouter } from './routes/templates.routes';
 import { createWorkspaceRouter } from './routes/workspace.routes';
 
 /**
@@ -74,6 +75,7 @@ export function createApp(): Application {
   app.use(passport.session());
 
   app.use('/api/health', createHealthRouter());
+  app.use('/api/templates', createTemplatesRouter());
   app.use('/auth', createAuthRouter(passport));
   app.use('/api/workspaces', createWorkspaceRouter());
   app.use('/api/brands', createBrandRouter());

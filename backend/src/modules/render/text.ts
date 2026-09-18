@@ -22,9 +22,7 @@ import { UnrenderableTextError } from './render.errors';
  * ZWJ and the variation selectors are part of emoji sequences and are handled by the
  * emoji lookup, which sees the whole grapheme.
  */
-const NON_DRAWING = new Set([
-  0x09, 0x0a, 0x0d, 0x20, 0xa0, 0x200b, 0x200c, 0x200d, 0xfe0e, 0xfe0f,
-]);
+const NON_DRAWING = new Set([0x09, 0x0a, 0x0d, 0x20, 0xa0, 0x200b, 0x200c, 0x200d, 0xfe0e, 0xfe0f]);
 
 /** Split on grapheme boundaries so an emoji sequence is examined as one unit. */
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });

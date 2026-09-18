@@ -51,7 +51,7 @@ async function main(): Promise<void> {
         '# Twemoji',
         '',
         `Graphics from [jdecked/twemoji](https://github.com/jdecked/twemoji) at \`${TWEMOJI_TAG}\`,`,
-        'the maintained continuation of Twitter\'s Twemoji.',
+        "the maintained continuation of Twitter's Twemoji.",
         '',
         'Copyright 2019 Twitter, Inc and other contributors.',
         '',

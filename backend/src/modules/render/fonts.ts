@@ -200,7 +200,9 @@ export function nearestWeight(font: CuratedFont | string, weight: number): FontW
   // An unknown family is a pipeline fault, not a content one: brand typography is
   // validated against the curated set before it is stored.
   if (!resolved) {
-    throw new RenderError(`"${font as string}" is not in the curated font set — see CURATED_FONTS.`);
+    throw new RenderError(
+      `"${font as string}" is not in the curated font set — see CURATED_FONTS.`,
+    );
   }
 
   return resolved.weights.reduce((best, candidate) =>

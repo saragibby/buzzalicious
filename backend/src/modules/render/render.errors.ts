@@ -48,7 +48,9 @@ export class RenderOverflowError extends AppError {
   ) {
     super(
       `Content does not fit the ${aspectRatio} canvas: ` +
-        overflows.map((item) => `${item.slot ?? item.node} overflows by ${Math.ceil(item.overflowPx)}px`).join(', '),
+        overflows
+          .map((item) => `${item.slot ?? item.node} overflows by ${Math.ceil(item.overflowPx)}px`)
+          .join(', '),
       { details: { aspectRatio, overflows }, cause: options?.cause },
     );
   }

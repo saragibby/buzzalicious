@@ -21,6 +21,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import type { AspectRatio, MediaType } from '@prisma/client';
 import type { Db } from '../../platform/db';
 import { NotFoundError, ValidationError } from '../../platform/errors';
@@ -127,8 +128,19 @@ async function loadContext(
 
   let logo: string | undefined;
   if (brand.logo) {
-    const bytes = await getStorage().get(brand.logo.storageKey);
-    logo = (await prepareImage(bytes)).dataUri;
+    // A brand can hold an `Asset` row whose object is no longer in storage — a failed
+    // upload, a lifecycle rule, or a seeded key with nothing behind it. Templates already
+    // have to render a brand that has no logo at all, so degrading to that is strictly
+    // better than refusing every render this brand asks for because its wordmark is gone.
+    try {
+      const bytes = await getStorage().get(brand.logo.storageKey);
+      logo = (await prepareImage(bytes)).dataUri;
+    } catch (error) {
+      logger.warn(
+        { brandId, storageKey: brand.logo.storageKey, err: error },
+        'brand logo object is missing; rendering without it',
+      );
+    }
   }
 
   return {
@@ -152,8 +164,7 @@ function textSlots(
   for (const [name, definition] of Object.entries(slotSchema)) {
     if (definition.type !== 'text') continue;
     const value = values[name];
-    text[name] =
-      typeof value === 'string' && value !== '' ? value : (definition.default ?? '');
+    text[name] = typeof value === 'string' && value !== '' ? value : (definition.default ?? '');
   }
 
   return text;
@@ -194,13 +205,19 @@ interface Versions {
 
 let versionCache: Versions | undefined;
 
+/**
+ * `createRequire` rather than a static import: these are the renderer's own dependencies'
+ * manifests, which have no types and no business being in the module graph.
+ */
+const resolve = createRequire(__filename);
+
 /** Recorded on every rendition so an unexpected pixel change can be attributed. */
 function loadVersions(): Versions {
   if (versionCache) return versionCache;
 
   const read = (name: string): string => {
     try {
-      return (require(`${name}/package.json`) as { version: string }).version;
+      return (resolve(`${name}/package.json`) as { version: string }).version;
     } catch {
       return 'unknown';
     }
@@ -238,7 +255,10 @@ export async function renderOne(
 
   if (!options.force) {
     const existing = await db.rendition.findFirst({
-      where: { aspectRatio: request.aspectRatio, rendererMeta: { path: ['cacheKey'], equals: cacheKey } },
+      where: {
+        aspectRatio: request.aspectRatio,
+        rendererMeta: { path: ['cacheKey'], equals: cacheKey },
+      },
       orderBy: { renderedAt: 'desc' },
     });
 
@@ -412,7 +432,13 @@ export interface PreviewRequest extends RenderRequest {
 export async function previewRender(
   db: Db,
   request: RenderRequest,
-): Promise<{ svg: string; width: number; height: number; overflows: unknown[]; fittedDown: string[] }> {
+): Promise<{
+  svg: string;
+  width: number;
+  height: number;
+  overflows: unknown[];
+  fittedDown: string[];
+}> {
   const context = await loadContext(db, request.templateId, request.brandId, request.slotValues);
   const slots = textSlots(context.slotSchema, request.slotValues);
   const assetIds = imageAssetIds(context.slotSchema, request.slotValues);

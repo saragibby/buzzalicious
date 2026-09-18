@@ -11,6 +11,7 @@
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import {
   METRICS_FILE,
@@ -53,7 +54,7 @@ interface ParsedFont {
 
 // Satori's own font parser, reached through `require` because it ships no types. Only the
 // vendor script touches it; the render path reads the generated manifest instead.
-const opentype = require('@shuding/opentype.js') as {
+const opentype = createRequire(__filename)('@shuding/opentype.js') as {
   parse(buffer: ArrayBuffer): ParsedFont;
 };
 
@@ -131,7 +132,9 @@ async function main(): Promise<void> {
         // Weights of one family cover the same characters, so the union across weights is
         // the family's coverage and any single weight would do. Union anyway: a subset
         // that silently loses a glyph at one weight should widen nothing.
-        coverage[font.family] = [...new Set([...(coverage[font.family] ?? []), ...parsed.codepoints])];
+        coverage[font.family] = [
+          ...new Set([...(coverage[font.family] ?? []), ...parsed.codepoints]),
+        ];
 
         const entry = (metrics[font.family] ??= {
           unitsPerEm: parsed.unitsPerEm,
