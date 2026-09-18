@@ -38,6 +38,7 @@ openssl rand -base64 32   # ENCRYPTION_KEY
 
 createdb buzzalicious
 npm run db:push
+npm run db:seed
 
 npm run dev
 ```
@@ -59,6 +60,10 @@ Create an OAuth client in Google Cloud Console and add
 
 Leaving `ALLOWED_EMAILS` and `ALLOWED_DOMAINS` empty lets anyone with a Google account in.
 Set at least one before deploying anywhere reachable.
+
+To access both seeded client workspaces locally, set `SEED_ADMIN_EMAIL` to the same email
+you use for Google sign-in before running `npm run db:seed`. The seed grants that user the
+`ADMIN` role in Rise & Shore and TaxDedux and safely reuses an existing Google-linked user.
 
 ## Commands
 

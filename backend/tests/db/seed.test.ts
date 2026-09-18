@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CredentialMode, MediaType, PostStatus } from '@prisma/client';
+import { CredentialMode, MediaType, PostStatus, Role } from '@prisma/client';
 import { disconnectPrisma, getPrisma, type Db } from '../../src/platform/db';
 import { seedAll, WORKSPACES } from '../../prisma/seed/index';
+import { SHARED_ADMIN } from '../../prisma/seed/workspaces';
 import { SEND_TIME_SLOTS } from '../../src/modules/brand/category.schemas';
 import { hasTestDatabase } from '../env';
 
@@ -44,6 +45,16 @@ describe.skipIf(!hasTestDatabase)('seed', () => {
     for (const workspace of workspaces) {
       expect(workspace.brands.length).toBeGreaterThan(0);
     }
+  });
+
+  it('makes the configured shared user an admin of every sample workspace', async () => {
+    const admin = await db.user.findUniqueOrThrow({
+      where: { email: SHARED_ADMIN.email },
+      include: { memberships: true },
+    });
+
+    expect(admin.memberships).toHaveLength(WORKSPACES.length);
+    expect(admin.memberships.every((membership) => membership.role === Role.ADMIN)).toBe(true);
   });
 
   it('stores only obviously fake credentials', async () => {

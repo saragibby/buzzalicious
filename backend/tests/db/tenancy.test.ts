@@ -2,7 +2,7 @@ import { Platform, Role } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { seedAll } from '../../prisma/seed/index';
-import { brandId, userId, workspaceId } from '../../prisma/seed/workspaces';
+import { SHARED_ADMIN, brandId, userId, workspaceId } from '../../prisma/seed/workspaces';
 import { createApp } from '../../src/http/app';
 import {
   requireBrandAccess,
@@ -50,7 +50,7 @@ const TAXDEDUX = {
   ownerId: userId('owner@taxdedux.example'),
 };
 
-const SHARED_ADMIN_ID = userId('sara@buzzalicious.example');
+const SHARED_ADMIN_ID = userId(SHARED_ADMIN.email);
 
 describe.skipIf(!hasTestDatabase)('tenancy isolation', () => {
   let db: Db;

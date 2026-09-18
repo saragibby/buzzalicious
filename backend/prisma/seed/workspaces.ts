@@ -133,7 +133,7 @@ export interface WorkspaceSpec {
 
 /** Present in every workspace, so multi-workspace membership is exercised by default. */
 export const SHARED_ADMIN = {
-  email: 'sara@buzzalicious.example',
+  email: process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase() || 'sara@buzzalicious.example',
   name: 'Sara (Buzzalicious)',
 };
 
@@ -639,12 +639,12 @@ export const socialAccountId = (brandSlug: string, key: string): string =>
 
 /** Seeds workspaces, users, memberships, brands, assets, personas, credentials, accounts. */
 export async function seedWorkspaces(db: Db, now: Date): Promise<number> {
-  const sharedAdminId = userId(SHARED_ADMIN.email);
-  await db.user.upsert({
-    where: { id: sharedAdminId },
-    create: { id: sharedAdminId, ...SHARED_ADMIN },
+  const sharedAdmin = await db.user.upsert({
+    where: { email: SHARED_ADMIN.email },
+    create: { id: userId(SHARED_ADMIN.email), ...SHARED_ADMIN },
     update: { name: SHARED_ADMIN.name },
   });
+  const sharedAdminId = sharedAdmin.id;
 
   for (const spec of WORKSPACES) {
     const wsId = workspaceId(spec.slug);
