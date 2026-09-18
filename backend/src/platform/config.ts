@@ -139,7 +139,52 @@ const baseSchema = z.object({
 
   /** Opt-in Postgres for DB-backed integration tests. See docs/12-testing.md. */
   TEST_DATABASE_URL: z.string().optional(),
+
+  /**
+   * `PLATFORM_APP` mode — Buzzalicious's own platform apps (docs/10, ADR-0009).
+   *
+   * **Config vars, never the application database.** That asymmetry is deliberate: a
+   * database compromise then exposes client credentials but not the platform-wide app
+   * that every `PLATFORM_APP` client would depend on.
+   *
+   * All optional. Unset simply means that tier of the resolver has nothing to offer, and
+   * a client without their own app gets an actionable "connect credentials" error rather
+   * than a half-configured authorization that fails at the callback.
+   *
+   * Meta's three networks share one app; X and Threads have their own.
+   */
+  PLATFORM_APP_X_KEY: z.string().optional(),
+  PLATFORM_APP_X_SECRET: z.string().optional(),
+  PLATFORM_APP_META_ID: z.string().optional(),
+  PLATFORM_APP_META_SECRET: z.string().optional(),
+  PLATFORM_APP_THREADS_ID: z.string().optional(),
+  PLATFORM_APP_THREADS_SECRET: z.string().optional(),
+
+  /** How long a started OAuth authorization stays completable. */
+  OAUTH_HANDSHAKE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+
+  /** Refresh a token this many days before it expires. */
+  TOKEN_REFRESH_LEAD_DAYS: z.coerce.number().int().positive().default(7),
+
+  /** Attempts per publish job before a target is marked FAILED. */
+  PUBLISH_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
 });
+
+/**
+ * A pair of app credentials, or nothing.
+ *
+ * Half a `PLATFORM_APP` is worse than none: an app id with no secret produces an
+ * authorize URL the user can complete and a callback that cannot exchange the code, so
+ * the failure lands after the client has already granted permission. One value present
+ * without the other is treated as "not configured" so the resolver falls through to its
+ * actionable error instead.
+ */
+function appOrUndefined(
+  appId: string | undefined,
+  appSecret: string | undefined,
+): { appId: string; appSecret: string } | undefined {
+  return appId && appSecret ? { appId, appSecret } : undefined;
+}
 
 const schema = baseSchema
   .superRefine((env, ctx) => {
@@ -238,6 +283,23 @@ const schema = baseSchema
         endpoint: env.AZURE_OPENAI_ENDPOINT,
         deployment: env.AZURE_OPENAI_DEPLOYMENT,
         apiVersion: env.AZURE_OPENAI_API_VERSION,
+      },
+    },
+
+    publish: {
+      /** Single canonical callback URL per platform. Clients register one URL, once. */
+      callbackUrl: (platform: string) => `${env.APP_URL}/auth/${platform.toLowerCase()}/callback`,
+      handshakeTtlSeconds: env.OAUTH_HANDSHAKE_TTL_SECONDS,
+      tokenRefreshLeadDays: env.TOKEN_REFRESH_LEAD_DAYS,
+      maxAttempts: env.PUBLISH_MAX_ATTEMPTS,
+      /**
+       * Our own apps, by resolver key. `undefined` means that tier is not configured, and
+       * the resolver must say so rather than proceeding with a blank app id.
+       */
+      platformApps: {
+        X: appOrUndefined(env.PLATFORM_APP_X_KEY, env.PLATFORM_APP_X_SECRET),
+        META: appOrUndefined(env.PLATFORM_APP_META_ID, env.PLATFORM_APP_META_SECRET),
+        THREADS: appOrUndefined(env.PLATFORM_APP_THREADS_ID, env.PLATFORM_APP_THREADS_SECRET),
       },
     },
   }));

@@ -17,6 +17,9 @@ import { createTrendRouter } from './routes/trend.routes';
 import { createTrendAdminRouter } from './routes/trend-admin.routes';
 import { createUsageAdminRouter } from './routes/usage-admin.routes';
 import { createWorkspaceRouter } from './routes/workspace.routes';
+import { createCredentialRouter } from './routes/credential.routes';
+import { createOAuthRouter } from './routes/oauth.routes';
+import { createPublishRouter } from './routes/publish.routes';
 
 /**
  * Builds the Express application. Deliberately separate from `index.ts` so tests can
@@ -96,6 +99,14 @@ export function createApp(): Application {
   // that router claims, and `/:brandId/posts` is not one of its routes.
   app.use('/api/brands/:brandId/posts', createPostRouter());
   app.use('/api/platforms', createPlatformRouter());
+
+  // W6. Credentials are workspace-level; scheduling and publishing are per brand. The
+  // OAuth router is mounted last and outside `/api` because its callback leg is a browser
+  // redirect from a platform, not an XHR — see its own comment for why it cannot require
+  // a session.
+  app.use('/api/workspaces/:workspaceId/credentials', createCredentialRouter());
+  app.use('/api/brands/:brandId/publishing', createPublishRouter());
+  app.use('/oauth', createOAuthRouter());
 
   if (shouldMountFilesRouter()) {
     app.use('/api/files', createFilesRouter());

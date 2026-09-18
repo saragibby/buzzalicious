@@ -1,6 +1,8 @@
 # 10 — Credentials & security
 
-> **Status:** proposed.
+> **Status:** partially implemented — storage, the resolver, pre-flight, the access log
+> and the signed-state OAuth handshake have landed (W6 PR 1). Per-workspace DEKs and the
+> rotation runbook have not; see "Deferred" below.
 > **Decision:** dual-mode credentials, `CLIENT_APP` first.
 > See [ADR-0009](./adr/0009-byo-platform-credentials.md).
 
@@ -287,3 +289,61 @@ Belongs to W6, ahead of any adapter work:
 - Access log retention period
 - Whether `PLATFORM_APP` mode ships in phase 1 at all, or only the abstraction
 - Backup/restore drill for the KEK ([Q22](./09-open-questions.md))
+
+## Implemented in W6 PR 1
+
+**One decrypt choke point.** `credential.resolver.ts` is the only place a stored secret is
+read. Everything else — routes, jobs, adapters — receives a `ResolvedCredential` it did not
+fetch. That is what makes the access log complete rather than merely well-intentioned: an
+entry cannot be forgotten at a call site, because there is one call site.
+
+**Resolution order.** Brand → workspace → platform app; within a tier, `CLIENT_APP` beats
+`DIRECT_TOKEN`. A `DIRECT_TOKEN` is a day-one bootstrap that expires, so a client who has
+upgraded should be using the upgrade without having to delete the old row first.
+
+Workspace-level work (`brandId: null`) filters for `brandId: null` explicitly rather than
+leaving the brand unconstrained. Unconstrained, every candidate scores identically and the
+tie breaks on `createdAt` — so the workspace would silently act as whichever brand happened
+to connect first. This was a real bug found during implementation, not a hypothetical.
+
+**Secrets never leave the service layer.** Routes return `CredentialView`, which carries
+only masks. `containsSecretField` exists so a job payload can be asserted clean; queue
+payloads carry identifiers only and re-resolve at the worker.
+
+**The handshake row.** X's OAuth 1.0a callback returns `oauth_token` and `oauth_verifier`
+but *not* `oauth_token_secret`, which is required for the exchange — so it has to be
+persisted between legs, encrypted, and it needs an owner. `OAuthHandshake` is that row.
+
+Signed state alone is not enough. A valid signed state is a bearer token that works until
+it expires, so single use is enforced in the database by a conditional `updateMany` whose
+`where` carries the whole precondition. A read-then-write has a window in which two
+concurrent callbacks both see an unconsumed row, and the cost of losing that race is one
+authorization exchanged twice.
+
+Every rejection — bad signature, expired, malformed, already consumed — raises the same
+error with the same message. Distinguishing them is free information for someone probing
+the endpoint, and there is nothing a legitimate user can do differently with any of them.
+
+**Tenant scoping.** `OAuthHandshake` is scoped on its own `brandId`, not its credential's.
+Routing it through the credential looks equivalent and is not: a workspace-shared
+credential has `brandId: null`, every brand in the workspace legitimately connects through
+it, and the indirection makes each brand's in-flight handshake — including its encrypted
+request-token secret — readable by every sibling brand. The first version of this rule had
+that bug; see `backend/tests/db/publishing.test.ts` for the test that catches it.
+
+## Deferred
+
+**Per-workspace DEKs wrapped by a KEK.** This document specifies envelope encryption with
+a data key per workspace. The platform crypto layer is currently single-key, and the
+stored format already carries a key identifier (`v1.<keyId>.<iv>.<ct>.<tag>`), so the seam
+for a second key exists and is versioned.
+
+The migration itself is deliberately not attempted here. Done half-way it is worse than
+not done: a mixture of wrapped and unwrapped values with no way to tell which is which is
+harder to fix than a uniformly single-key store, and the re-encryption pass needs a
+rotation runbook and an operational owner that PR 1 does not have. It should be its own
+change, against a store whose format is already versioned — which it now is.
+
+**Rotation runbook and health sweeps.** `refresh()` and `validate()` are on the adapter
+contract and are exercised in tests; the periodic job that calls them across every stored
+account, and the runbook for a compromised app secret, are W6 PR 2.
