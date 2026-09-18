@@ -186,6 +186,23 @@ export function statusFor(error: unknown): number {
  *
  * For those kinds the message is rebuilt from what *we* declared. `received` is never
  * forwarded at all.
+ *
+ * What is still echoed, stated precisely, because the previous version of this comment
+ * claimed a blanket safety it did not have and that is how the enum leak survived review:
+ *
+ *  - **`path` forwards client-submitted object keys verbatim.** For a fixed schema a path
+ *    segment is a field name we declared, which is safe. For a `z.record()` the key *is*
+ *    client data: `CaptionOverridesSchema` is `z.record(PlatformSchema, …)`, so a bad key
+ *    on `PATCH /posts/:id` comes back as `captionOverrides.<whatever-they-sent>`.
+ *  - **`unrecognized_keys` names the offending key**, which is the whole point of it —
+ *    a client cannot fix a misspelled field without being told which one.
+ *
+ * Both are the client's own input returned to the client that sent it, and both are the
+ * information that makes the error actionable, so they are kept deliberately. The residual
+ * risk is a caller that transposes a secret into a *key* position rather than a value.
+ * If that ever needs closing, the fix is to drop `path` for record-keyed schemas rather
+ * than to guess at which segments look sensitive — a length or charset heuristic does not
+ * separate `sk-live-…` from a legitimate key and would give false assurance.
  */
 
 /** Issue kinds whose `message` interpolates the value the client sent. */
