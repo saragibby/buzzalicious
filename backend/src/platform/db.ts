@@ -1,19 +1,23 @@
 import { PrismaClient } from '@prisma/client';
 import { getConfig } from './config';
 import { getLogger } from './logger';
+import { createEncryptionExtension } from './prisma-encryption';
 
 /**
  * The Prisma client singleton.
  *
  * Query logging goes through Pino rather than straight to stdout, so it is structured,
  * level-controlled, and subject to the same redaction as everything else — the old
- * `log: ['query']` printed parameter values, which for this schema will include
- * encrypted credentials and, before encryption lands, worse.
+ * `log: ['query']` printed parameter values, which for this schema includes encrypted
+ * credentials.
  *
- * W6 adds the token-encryption Prisma extension here (docs/03-teardown.md).
+ * The client is extended with `prisma-encryption.ts`, so `SocialAccount` tokens and
+ * `PlatformCredential` secrets are encrypted on write and decrypted on read without any
+ * caller doing anything. Use this client, never `new PrismaClient()` — a raw client
+ * writes plaintext tokens to the database and reads ciphertext back as garbage.
  */
 
-function createPrismaClient(): PrismaClient {
+function createPrismaClient() {
   const config = getConfig();
   const logger = getLogger().child({ component: 'prisma' });
 
@@ -41,12 +45,15 @@ function createPrismaClient(): PrismaClient {
     logger.debug({ query: event.query, durationMs: event.duration });
   });
 
-  return client;
+  return client.$extends(createEncryptionExtension());
 }
 
-let cached: PrismaClient | undefined;
+/** The extended client's type. Repositories should accept this, not `PrismaClient`. */
+export type Db = ReturnType<typeof createPrismaClient>;
 
-export function getPrisma(): PrismaClient {
+let cached: Db | undefined;
+
+export function getPrisma(): Db {
   cached ??= createPrismaClient();
   return cached;
 }

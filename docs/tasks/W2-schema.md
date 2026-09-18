@@ -74,12 +74,17 @@ Seed must be idempotent and re-runnable.
 
 ## Acceptance criteria
 
-- [ ] `prisma migrate dev` applies cleanly from an empty database
-- [ ] `npm run db:seed` is idempotent
-- [ ] Encryption round-trips; the raw DB column is unreadable ciphertext
-- [ ] Zod schemas exported and unit-tested for every JSON column
-- [ ] Templates and trends carry no `workspaceId` (global); everything user-owned does
-- [ ] `docs/02-data-model.md` updated to match anything that changed during implementation
+- [x] `prisma migrate dev` applies cleanly from an empty database — and so does
+      `prisma migrate deploy`, which is the path the Procfile actually uses and which
+      `backend/tests/global-setup.ts` now rehearses on every database test run
+- [x] `npm run db:seed` is idempotent — asserted in `tests/db/seed.test.ts`, not just by hand
+- [x] Encryption round-trips; the raw DB column is unreadable ciphertext — asserted against
+      the raw column with `$queryRaw`, since a round-trip through our own codec passes even
+      when the column holds plaintext
+- [x] Zod schemas exported and unit-tested for every JSON column
+- [x] Templates and trends carry no `workspaceId` (global); everything user-owned does —
+      `Template.workspaceId` exists but is nullable and null for every v1 row, per ADR-0010
+- [x] `docs/02-data-model.md` updated to match anything that changed during implementation
 
 ## Notes
 

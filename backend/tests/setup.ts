@@ -8,6 +8,11 @@
  */
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL ??= 'postgresql://localhost:5432/buzzalicious_test';
+// A database test connects through the ordinary application client, so pointing
+// DATABASE_URL at the throwaway test database is what makes `getPrisma()` safe to use.
+if (process.env.TEST_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+}
 process.env.APP_URL ??= 'http://127.0.0.1:3001';
 process.env.WEB_URL ??= 'http://127.0.0.1:5173';
 process.env.SESSION_SECRET ??= 'test-session-secret-that-is-long-enough-ok';

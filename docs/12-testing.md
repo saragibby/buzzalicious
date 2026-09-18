@@ -44,8 +44,20 @@ createdb buzzalicious_test
 TEST_DATABASE_URL=postgresql://localhost:5432/buzzalicious_test npm test
 ```
 
-The database named there is truncated between tests. Never point it at one you care
-about.
+The schema is applied automatically. `backend/tests/global-setup.ts` runs
+`prisma migrate deploy` before the suite whenever `TEST_DATABASE_URL` is set, and does
+nothing when it is not. Deliberately `migrate deploy` and not `migrate dev`: it is the
+same command the Procfile runs on release, so every test run rehearses the deploy path
+rather than only the local one. Create the database; do not migrate it by hand.
+
+Database tests own their fixtures. Backend test files run one at a time
+(`fileParallelism: false`) because they share one Postgres, but that only removes
+interleaving, not interference — a test that deletes rows another file expects still
+breaks it. Create what you need under a unique name and clean it up, as
+`tests/db/schema.test.ts` does. Seeded data is the exception: it is idempotent and may be
+read by anything.
+
+Never point `TEST_DATABASE_URL` at a database you care about.
 
 ## What to test
 
@@ -99,6 +111,9 @@ text, not class names). `fetch` is stubbed; jsdom has no server to talk to.
 every pull request, with a Postgres service and `TEST_DATABASE_URL` set. Build is last: it
 is the slowest step and the least likely to be the thing that is broken.
 
+There is no separate migration step, and there should not be one: the global setup applies
+migrations, so the database tests and the deploy-path rehearsal cannot drift apart.
+
 CI holds no credentials at all, real or fake. The test environment lives in
 `backend/tests/setup.ts` and nowhere else — every variable there is assigned with `??=`,
 so anything the workflow exports silently overrides it. The workflow sets only
@@ -109,12 +124,27 @@ fake environment and mistyped `ENCRYPTION_KEY` by four characters; CI then fed t
 invalid key to every test and the suite failed in a way that passed locally. One
 definition of the test environment, or two that disagree.
 
-## Current state (end of M1)
+## Current state (end of M2)
 
-95 tests across 8 files: crypto round-trip and tamper detection, config validation, the
-storage driver and its signed URLs, the HTTP error boundary and app smoke tests, the AI
-prompt and parse layer, and the frontend auth guard and API client.
+217 tests across 19 files.
 
-No database tests exist yet — there are no models until W2. The CI Postgres service and
-the `TEST_DATABASE_URL` convention are in place so that W2 can add them without also
-having to work out how to run them.
+Running without a database, 193 of them: crypto round-trip and tamper detection, the
+Prisma encryption extension against a mock, config validation, the storage driver and its
+signed URLs, local-to-UTC time conversion across DST, the HTTP error boundary and app
+smoke tests, the AI prompt and parse layer, every JSON column's Zod contract, and the
+frontend auth guard and API client.
+
+With `TEST_DATABASE_URL` set, 24 more in `backend/tests/db/`:
+
+- **`encryption.test.ts`** — that the stored column is ciphertext, asserted with
+  `$queryRaw` against the raw value. A round-trip through our own codec passes even when
+  the column holds plaintext, so this is the assertion that actually means something. Also
+  covers the version prefix, decryption through a relation `include`, re-encryption
+  idempotence, the refusal to filter on an encrypted column, and tamper detection.
+- **`schema.test.ts`** — workspace cascade delete, the uniqueness constraints downstream
+  code relies on instead of checking for duplicates itself, `SetNull` on a retired
+  template, and the ADR-0010 tenancy boundary read out of `information_schema`.
+- **`seed.test.ts`** — idempotence, two separate workspaces, unmistakably fake
+  credentials, all eight send-time slots covered per brand with genuinely different
+  shapes, text posts with zero renditions, a schedule that crosses a DST boundary, and
+  `PostMetric.linkClicks` agreeing with the `LinkClick` rows it was derived from.
