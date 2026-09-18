@@ -191,9 +191,18 @@ So: a **minimal Buzzalicious-owned app, read-only scopes only** — public searc
 and trending endpoints. No publishing permissions, no client data access. This is a much
 lighter review than a publishing app and can proceed in parallel without blocking anything.
 
-Collectors resolve credentials through the same `CredentialResolver`, always in
-`PLATFORM_APP` mode. **Never let a collector fall back to a client credential** — this is a
-deliberate constraint the code should enforce, not a convention.
+Collectors resolve credentials through `resolveCollectorCredential`, which returns
+Buzzalicious's own app in `PLATFORM_APP` mode. **A collector cannot fall back to a client
+credential** — and that is now structural rather than a convention: the function takes no
+database handle, so there is no client credential within its reach. `resolveCredential`,
+the tenant-scoped resolver, deliberately *does* run the brand → workspace → platform
+fallback chain and must never be called from a collector.
+
+The separation is enforced by signature rather than by a flag on purpose. A boolean option
+would sit one `true` away from the bug it exists to prevent, and the bug is silent: research
+traffic on a client's app produces no error, only a quota the client later finds already
+spent. Instagram hashtag search is capped per *token*, so collector and client draw from
+the same budget.
 
 Manual curation, RSS, and Google Trends collectors need no platform credentials at all.
 
