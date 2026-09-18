@@ -1,6 +1,13 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import { ZodError } from 'zod';
 import { getLogger } from '../../platform/logger';
-import { NotFoundError, isAppError, statusFor, toErrorBody } from '../../platform/errors';
+import {
+  NotFoundError,
+  ValidationError,
+  isAppError,
+  statusFor,
+  toErrorBody,
+} from '../../platform/errors';
 
 /**
  * The single error boundary. Registered last, after every router.
@@ -15,7 +22,41 @@ export const notFoundHandler: RequestHandler = (req, _res, next) => {
   next(new NotFoundError(`Route ${req.method} ${req.path}`));
 };
 
-export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
+/**
+ * A rejected request body is the client's mistake, not ours.
+ *
+ * Every router validates with `Schema.parse(req.body)`, which throws a `ZodError`. A
+ * `ZodError` is not an `AppError`, so without this it fell through to the generic branch
+ * and became a **500 logged at error level** — telling the client nothing actionable,
+ * blaming the server for a malformed request, and burying real faults in noise from
+ * ordinary bad input.
+ *
+ * Converted rather than special-cased downstream so `statusFor`/`toErrorBody` stay
+ * Zod-free and every existing exposure rule continues to apply unchanged.
+ *
+ * `issues` is safe to expose: it names the offending paths and why they failed, which is
+ * exactly what the client needs to fix the call, and it carries only what the client
+ * already sent. `message` is deliberately generic rather than Zod's default, which
+ * stringifies the whole issue array into a wall of JSON.
+ */
+function normalize(error: unknown): unknown {
+  if (!(error instanceof ZodError)) return error;
+
+  return new ValidationError('That request body is not valid.', {
+    details: {
+      issues: error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        code: issue.code,
+        message: issue.message,
+      })),
+    },
+    cause: error,
+  });
+}
+
+export const errorHandler: ErrorRequestHandler = (caught, req, res, next) => {
+  const error = normalize(caught);
+
   if (res.headersSent) {
     // Express cannot recover once a response has started streaming.
     next(error);

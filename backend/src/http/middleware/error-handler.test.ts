@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   AuthError,
   ExternalServiceError,
@@ -86,6 +87,52 @@ describe('errorHandler', () => {
       expect(response.body.error).toHaveProperty('code');
       expect(response.body.error).toHaveProperty('message');
     }
+  });
+});
+
+/**
+ * A `ZodError` is what every router throws for a malformed body, and it is not an
+ * `AppError` — so before this it fell through to the generic branch and became a **500
+ * logged at error level**. That is wrong in three ways at once: it blames the server for
+ * the client's mistake, tells the client nothing it can act on, and buries genuine faults
+ * under noise from ordinary bad input.
+ *
+ * This is deliberately tested at the boundary rather than per-route, because the boundary
+ * is what makes it true for all nine routers that call `Schema.parse`.
+ */
+describe('errorHandler and schema validation', () => {
+  const schema = z.object({ title: z.string() }).strict();
+
+  it('turns a rejected body into a 400 that names the offending field', async () => {
+    const response = await request(appThrowing(schema.safeParse({ title: 1 }).error)).get('/boom');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+
+    // Naming the path is the point. A 400 saying only "invalid" leaves the client
+    // guessing, which in practice means a support ticket.
+    expect(response.body.error.details.issues[0]).toMatchObject({ path: 'title' });
+  });
+
+  it('reports an unknown key as unrecognized rather than swallowing it', async () => {
+    const response = await request(
+      appThrowing(schema.safeParse({ title: 'ok', ttile: 'typo' }).error),
+    ).get('/boom');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details.issues[0].code).toBe('unrecognized_keys');
+    expect(JSON.stringify(response.body.error.details)).toContain('ttile');
+  });
+
+  it('still returns an opaque 500 for a genuine server fault', async () => {
+    // The control that keeps the conversion honest: it must catch Zod specifically, not
+    // downgrade every unrecognised error to a 400 and hide real faults from the logs.
+    const response = await request(appThrowing(new TypeError('cannot read x of undefined'))).get(
+      '/boom',
+    );
+
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(response.body)).not.toContain('cannot read x');
   });
 });
 
