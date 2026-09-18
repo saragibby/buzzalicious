@@ -14,6 +14,22 @@ One command covers backend and frontend, because "did the tests pass?" should ha
 answer. The two halves need different environments, so `vitest.workspace.ts` defines two
 projects — `backend` on `node`, `frontend` on `jsdom` — rather than compromising on one.
 
+### After merging anything, re-sync the environment before believing the result
+
+Two failure modes here both present as something other than a failure:
+
+- **A merged schema change leaves a stale Prisma client.** The suite reports
+  **"no tests found"**. That is a *collection* failure, not a pass — the files never
+  loaded because the generated client lacks a new enum or model. Run `npx prisma generate`.
+- **A merged dependency is missing locally.** The W6 spine added `pg-boss`; before
+  `npm install`, five files failed to load with `Failed to load url pg-boss`, while the
+  summary still read `559 passed` with **zero failures**. Passing test *counts* mean
+  nothing if the file count is short — always read `Test Files` alongside `Tests`.
+
+So after any merge: `npm install && npx prisma generate`, then compare the **file and
+test totals** against what the branch reported. A drop in totals with no red is the
+signature of both bugs.
+
 ## `npm test` must pass on a clean clone
 
 No Postgres, no API keys, no `.env`. This is a hard rule: a suite that only runs on a
@@ -109,6 +125,38 @@ Worth a test:
 
 Not worth a test: that a framework works, that a getter returns what was set, or the
 exact wording of a string.
+
+### Tenancy rules: cover the shape of the row, not just the scope kind
+
+Two real leaks have now shipped past tenancy tests that looked thorough. Both had the
+same root, and the rule below is what actually catches them.
+
+**`{}` in a `ScopeRule` is *no filter*, not a deny.** A broken rule returns *more* rows,
+never fewer. So every assertion shaped like "returns 0 rows", "throws", or any count
+check **passes under the bug**. Assert on **identity** — `toContain` / `not.toContain` on
+specific ids — and make sure another tenant's rows are genuinely present in the database
+at the moment of the read. A test that would pass against an empty table proves nothing.
+
+**If a rule reaches through a relation, scope-kind coverage is necessary but not
+sufficient.** W10's rollup leak was invisible to a workspace-scoped test because the bug
+was in the *brand* rule — that one is caught by covering both scope kinds. W6's
+`OAuthHandshake` leak passed tests that *already* covered **both** kinds, because both
+fixtures used a brand-scoped credential and the leak only opened when the related
+credential had `brandId: null`.
+
+The missing axis there was not the scope kind. It was **the shape of the row being scoped
+through**. So:
+
+> When a rule filters through a relation — `{ credential: { workspaceId } }`,
+> `{ post: { brandId } }` — write a fixture for **every shape that relation can take**,
+> especially the **nullable-FK** shape. A nullable owner column is where sharing
+> semantics live, and therefore where the leak is.
+
+Concretely, a workspace-shared credential has `brandId: null`. Scoping a child row
+through `{ credential: { OR: [{ brandId }, { brandId: null }] } }` reads as "my brand's
+credentials plus shared ones" and is wrong: every sibling brand matches the shared arm
+and sees each other's in-flight rows. Prefer the row's **own** `brandId` when the child
+row has one, and write the test with two brands sharing one workspace-level credential.
 
 ## Conventions
 
