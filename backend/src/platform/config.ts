@@ -41,6 +41,19 @@ const csv = z
   )
   .pipe(z.array(z.string()));
 
+/**
+ * A USD amount, kept as a string.
+ *
+ * Money never becomes a JavaScript number in this codebase: `z.coerce.number()` here would
+ * turn a config ceiling into a binary float and then compare it against a `Decimal`
+ * column, which is exactly the Float-in-billing-arithmetic that ADR-0011 forbids. The
+ * string is handed to `Prisma.Decimal` at the point of use.
+ */
+const usdAmount = z
+  .string()
+  .regex(/^\d+(\.\d{1,6})?$/, 'must be a positive USD amount such as "25.00"')
+  .refine((v) => Number(v) > 0, 'must be greater than zero');
+
 const baseSchema = z.object({
   NODE_ENV: nodeEnv.default('development'),
   PORT: z.coerce.number().int().positive().default(3001),
@@ -105,6 +118,24 @@ const baseSchema = z.object({
    * closed — the cost of a wrong default here is one client's typo reaching every tenant.
    */
   TREND_ADMIN_EMAILS: csv.default(''),
+
+  /**
+   * Who may read the cross-tenant usage and spend view (W10). Fail-closed like
+   * `TREND_ADMIN_EMAILS` and deliberately separate from it: curating the global trend feed
+   * and reading every client's spend are different privileges, and collapsing them would
+   * hand one to whoever was granted the other.
+   */
+  PLATFORM_ADMIN_EMAILS: csv.default(''),
+
+  /**
+   * Default monthly AI provider-cost ceiling per workspace, in USD (ADR-0011).
+   * Overridable per workspace by `Workspace.aiMonthlyCeilingUsd`.
+   *
+   * A string, not a number, and kept one all the way to `Prisma.Decimal`: binary floats
+   * do not represent money, and this value is compared against a `Decimal` column. It is
+   * a conservative fuse rating, not a price — pricing is Q13 and is not decided here.
+   */
+  AI_MONTHLY_CEILING_USD: usdAmount.default('25.00'),
 
   /** Opt-in Postgres for DB-backed integration tests. See docs/12-testing.md. */
   TEST_DATABASE_URL: z.string().optional(),
@@ -179,6 +210,11 @@ const schema = baseSchema
       adminEmails: env.TREND_ADMIN_EMAILS,
     },
 
+    platform: {
+      /** Empty means nobody. See the note on PLATFORM_ADMIN_EMAILS above. */
+      adminEmails: env.PLATFORM_ADMIN_EMAILS,
+    },
+
     storage: {
       driver: env.STORAGE_DRIVER,
       localDir: env.STORAGE_LOCAL_DIR,
@@ -195,6 +231,8 @@ const schema = baseSchema
     ai: {
       openaiApiKey: env.OPENAI_API_KEY,
       geminiApiKey: env.GEMINI_API_KEY,
+      /** Default per-workspace monthly ceiling, as a string. See `usdAmount` above. */
+      monthlyCeilingUsd: env.AI_MONTHLY_CEILING_USD,
       azure: {
         apiKey: env.AZURE_OPENAI_API_KEY,
         endpoint: env.AZURE_OPENAI_ENDPOINT,

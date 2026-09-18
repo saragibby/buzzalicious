@@ -7,6 +7,7 @@ import type {
   AiResult,
   AiStructuredRequest,
   AiTextRequest,
+  AiUsage,
   RenderedPrompt,
 } from './types';
 
@@ -28,20 +29,21 @@ export class GeminiProvider implements AiProvider {
   }
 
   async generateText(request: AiTextRequest, prompt: RenderedPrompt): Promise<AiResult<string>> {
-    const { text, model } = await this.complete(request, prompt);
-    return { provider: this.name, purpose: request.purpose, model, data: text };
+    const { text, model, usage } = await this.complete(request, prompt);
+    return { provider: this.name, purpose: request.purpose, model, data: text, usage };
   }
 
   async generateStructured<T>(
     request: AiStructuredRequest<T>,
     prompt: RenderedPrompt,
   ): Promise<AiResult<T>> {
-    const { text, model } = await this.complete(request, prompt, true);
+    const { text, model, usage } = await this.complete(request, prompt, true);
     return {
       provider: this.name,
       purpose: request.purpose,
       model,
       data: parseModelJson(text, request.schema, request.schemaName),
+      usage,
     };
   }
 
@@ -49,7 +51,7 @@ export class GeminiProvider implements AiProvider {
     request: AiTextRequest,
     prompt: RenderedPrompt,
     json = false,
-  ): Promise<{ text: string; model: string }> {
+  ): Promise<{ text: string; model: string; usage?: AiUsage }> {
     const modelName = request.model ?? DEFAULT_MODEL;
 
     try {
@@ -64,7 +66,20 @@ export class GeminiProvider implements AiProvider {
       });
 
       const result = await model.generateContent(prompt.user);
-      return { text: result.response.text(), model: modelName };
+
+      // Gemini reports usage under `usageMetadata` with its own names. Captured rather
+      // than dropped: without it a Gemini-backed workspace spends against the ceiling
+      // without ever moving the meter, so the fuse would never trip (ADR-0011).
+      const reported = result.response.usageMetadata;
+      const usage: AiUsage | undefined = reported
+        ? {
+            promptTokens: reported.promptTokenCount,
+            completionTokens: reported.candidatesTokenCount,
+            totalTokens: reported.totalTokenCount,
+          }
+        : undefined;
+
+      return { text: result.response.text(), model: modelName, usage };
     } catch (error) {
       throw new ExternalServiceError(this.name, 'AI text generation failed', {
         cause: error,

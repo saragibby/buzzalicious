@@ -1,8 +1,9 @@
 // Buzzalicious — v1 domain model.
 //
 // The contract is docs/02-data-model.md, with the full PlatformCredential definition from
-// docs/10-credentials-and-security.md folded in. This file is owned exclusively by W2;
-// every other workstream codes against what is here.
+// docs/10-credentials-and-security.md folded in. This file was authored by W2 and is
+// edited by exactly one workstream at a time; W10 holds that ownership for the usage
+// metering migration (ADR-0011). Every other workstream codes against what is here.
 //
 // Tenancy (ADR-0010): each client is a Workspace. Brand, SocialAccount,
 // PlatformCredential, Asset, Post, PostTarget, Rendition, ShortLink, LinkClick,
@@ -39,16 +40,24 @@ model User {
 }
 
 model Workspace {
-  id          String               @id @default(uuid())
-  name        String
-  slug        String               @unique
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Monthly AI provider-cost ceiling in USD (ADR-0011). Null means "use the configured
+  /// platform default" rather than "unlimited" — an unset column must not be the way a
+  /// workspace escapes the fuse. Decimal because it is money.
+  aiMonthlyCeilingUsd Decimal? @db.Decimal(10, 2)
+
   memberships Membership[]
   brands      Brand[]
   credentials PlatformCredential[]
   // Client-specific templates. Empty in v1; every seeded template is global.
   templates   Template[]
+  usageEvents UsageEvent[]
+  usageRollups UsagePeriodRollup[]
 
   @@map("workspaces")
 }
@@ -143,6 +152,7 @@ model Brand {
   shortLinks     ShortLink[]
   credentials    PlatformCredential[]
   generations    AiGeneration[]
+  usageEvents    UsageEvent[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId, deletedAt])
@@ -569,6 +579,7 @@ model PostTarget {
   updatedAt      DateTime     @updatedAt
 
   metrics PostMetric[]
+  usage   UsageEvent[]
 
   @@unique([postId, platform])
   @@index([status, scheduledFor])
@@ -592,6 +603,7 @@ model Rendition {
   // Shape: RendererMetaSchema in modules/render/rendition.schemas.ts
   rendererMeta Json?
   targets      PostTarget[]
+  usage        UsageEvent[]
 
   @@index([postId, aspectRatio])
   @@map("renditions")
@@ -717,7 +729,104 @@ model AiGeneration {
   estimatedCost    Float?
   createdAt        DateTime @default(now())
 
+  usage UsageEvent[]
+
   @@index([brandId, createdAt])
   @@index([postId])
   @@map("ai_generations")
+}
+
+// ─── Usage metering (ADR-0011) ───────────────────────────────────────────────────
+//
+// The meter is deliberately not AI-specific. AiGeneration above stays domain telemetry
+// for debugging prompts; it has no workspace, no idempotency key, and a Float cost, which
+// makes it the wrong shape for anything billable. Billing quantities live in UsageEvent
+// and reference the telemetry row as the source record rather than acting as the counter.
+
+enum UsageMetric {
+  /// quantity = total tokens for one provider call; providerCostUsd = vendor charge.
+  AI_TOKENS
+  /// quantity = 1 per PostTarget actually delivered. Emitted by W6.
+  POST_PUBLISHED
+  /// quantity = 1 per Rendition produced.
+  RENDITION_RENDERED
+  /// quantity = 1 per collection or curation run over the global feed.
+  TREND_REFRESH
+  /// quantity = accounts newly connected.
+  CONNECTED_ACCOUNT
+}
+
+/// Append-only. No updates, no deletes: a mutable billing ledger is not a ledger. A
+/// wrongly recorded charge is corrected with a compensating event, not an UPDATE — which
+/// is why there is no `updatedAt` here and why nothing in the codebase writes one.
+model UsageEvent {
+  id String @id @default(uuid())
+
+  // Workspace is the client and therefore the billing entity (ADR-0010). Required.
+  // Brand is optional: platform-global work (trend classification) has no brand, and a
+  // hard-deleted brand must not take the ledger row with it — hence SetNull, not Cascade.
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brandId     String?
+  brand       Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  metric   UsageMetric
+  /// Integer, in the metric's own unit. Never money.
+  quantity Int
+
+  /// What the vendor charged *us*. Never what a customer is charged — keeping them apart
+  /// is what keeps per-tier margin visible later. Decimal, never Float.
+  providerCostUsd Decimal? @db.Decimal(12, 6)
+
+  /// Caller-supplied natural key, and **attempt-independent**: `publish:{postTargetId}`,
+  /// never `publish:{postTargetId}:{attempt}`. A post published after three retries is
+  /// one billable post, so emitting is safe for a caller that cannot tell it is a retry.
+  idempotencyKey String @unique
+
+  occurredAt DateTime @default(now())
+  /// First instant of the UTC calendar month containing `occurredAt`. Stored rather than
+  /// derived so the rollup key is an indexed column instead of an expression.
+  periodStart DateTime
+
+  // The thing that caused the charge. "Why is this invoice $340" has to be answerable,
+  // and all three are SetNull so answering it never stands in the way of a delete.
+  aiGenerationId String?
+  aiGeneration   AiGeneration? @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  postTargetId   String?
+  postTarget     PostTarget?   @relation(fields: [postTargetId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  renditionId    String?
+  rendition      Rendition?    @relation(fields: [renditionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Shape: UsageMetadataSchema in modules/usage/usage.schemas.ts
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, metric, periodStart])
+  @@index([workspaceId, occurredAt])
+  @@index([aiGenerationId])
+  @@map("usage_events")
+}
+
+/// Derived from UsageEvent, and reconstructible from it at any time. It exists so a cap
+/// check is one indexed read instead of an aggregate over the ledger — never as a second
+/// source of truth. "Rebuild from events equals incremental totals" is a test.
+model UsagePeriodRollup {
+  id String @id @default(uuid())
+
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  metric      UsageMetric
+  periodStart DateTime
+  periodEnd   DateTime
+
+  /// BigInt because token counts accumulate; the event column stays Int.
+  quantity        BigInt  @default(0)
+  providerCostUsd Decimal @default(0) @db.Decimal(14, 6)
+  eventCount      Int     @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, metric, periodStart])
+  @@index([workspaceId, periodStart])
+  @@map("usage_period_rollups")
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { generateStructured } from '../ai';
+import { generateStructuredMetered } from '../ai/metered';
 import { NotFoundError } from '../../platform/errors';
 import { BrandVoiceGuideSchema, type BrandVoiceGuide } from './brand.schemas';
 import type { ScopedDb } from '../../platform/tenancy';
@@ -60,22 +60,29 @@ export async function draftVoiceGuide(
       : brand.category.name
     : 'Unspecified';
 
-  const result = await generateStructured({
-    purpose: 'voice_guide_draft',
-    schema: BrandVoiceGuideSchema as z.ZodType<BrandVoiceGuide>,
-    schemaName: 'BrandVoiceGuide',
-    input: {
-      businessName: brand.name,
-      category,
-      ...(brand.website ? { website: brand.website } : {}),
-      ...(input.audience ? { audience: input.audience } : {}),
-      ...(input.notes ? { notes: input.notes } : {}),
+  const result = await generateStructuredMetered(
+    // W10: metered against the brand's own workspace, read from the row we just fetched
+    // through the scoped client — so attribution cannot be spoofed by a caller and cannot
+    // drift from tenancy. An exhausted workspace throws `BudgetExceededError` (402) here,
+    // before the provider call.
+    { db, workspaceId: brand.workspaceId, brandId: brand.id },
+    {
+      purpose: 'voice_guide_draft',
+      schema: BrandVoiceGuideSchema as z.ZodType<BrandVoiceGuide>,
+      schemaName: 'BrandVoiceGuide',
+      input: {
+        businessName: brand.name,
+        category,
+        ...(brand.website ? { website: brand.website } : {}),
+        ...(input.audience ? { audience: input.audience } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
+      },
+      // Low, not zero. A voice guide that reads like every other voice guide is useless,
+      // but this is a document the user edits rather than copy that ships, so wandering
+      // costs more than it buys.
+      temperature: 0.6,
     },
-    // Low, not zero. A voice guide that reads like every other voice guide is useless,
-    // but this is a document the user edits rather than copy that ships, so wandering
-    // costs more than it buys.
-    temperature: 0.6,
-  });
+  );
 
   return { draft: result.data, generated: true, model: result.model };
 }

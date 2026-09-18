@@ -221,6 +221,21 @@ per-tier margin visible. Note the strategic thread above: if near-free Satori re
 supports unlimited-posts positioning, AI is the only genuinely scarce per-tenant resource,
 which would make the AI ceiling and the subscription tier the same mechanism.
 
+**What is actually being metered**, as shipped by W10, so a pricing decision can be made
+against the data rather than against intentions. `UsageMetric` is:
+
+| Metric | Quantity means | Provider cost |
+| --- | --- | --- |
+| `AI_TOKENS` | prompt + completion tokens | estimated USD from a rate table |
+| `POST_PUBLISHED` | posts accepted by a platform | none |
+| `RENDITION_RENDERED` | images produced by Satori/resvg | none — this is the near-free axis above |
+| `TREND_REFRESH` | collector runs | none today |
+| `CONNECTED_ACCOUNT` | accounts connected | none |
+
+Only `AI_TOKENS` carries money, which is the empirical form of the claim that AI is the
+only scarce per-tenant resource. If that holds once there is real usage, the table above is
+the shortlist of things a tier could be priced on, and the rest are free-to-serve.
+
 ### Q17 — Is AI image generation in v1 scope?
 
 Surfaced by the audit ([11](./11-source-material.md)). Tax Dedux generates post images with

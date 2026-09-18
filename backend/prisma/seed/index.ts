@@ -4,6 +4,7 @@ import { seedTemplates } from './templates';
 import { seedTrends } from './trends';
 import { seedWorkspaces, WORKSPACES } from './workspaces';
 import { seedHistory } from './history';
+import { seedUsage } from './usage';
 
 /**
  * The development seed.
@@ -27,6 +28,7 @@ export interface SeedSummary {
   metrics: number;
   clicks: number;
   generations: number;
+  usageEvents: number;
 }
 
 export async function seedAll(db: Db, now: Date = new Date()): Promise<SeedSummary> {
@@ -40,6 +42,7 @@ export async function seedAll(db: Db, now: Date = new Date()): Promise<SeedSumma
     metrics: 0,
     clicks: 0,
     generations: 0,
+    usageEvents: 0,
   };
 
   for (const workspace of WORKSPACES) {
@@ -50,6 +53,10 @@ export async function seedAll(db: Db, now: Date = new Date()): Promise<SeedSumma
     summary.clicks += history.clicks;
     summary.generations += history.generations;
   }
+
+  // Last: usage references the workspaces and brands above, and its self-check rebuild
+  // needs every event already written.
+  summary.usageEvents = (await seedUsage(db, now)).events;
 
   return summary;
 }

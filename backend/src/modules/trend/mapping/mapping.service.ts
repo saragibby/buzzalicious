@@ -3,7 +3,9 @@ import { z } from 'zod';
 import type { Db } from '../../../platform/db';
 import { getConfig } from '../../../platform/config';
 import { getLogger } from '../../../platform/logger';
-import { generateStructured } from '../../ai';
+import { generateStructuredMetered } from '../../ai/metered';
+import { isBudgetExceededError } from '../../usage/usage.errors';
+import { getPlatformWorkspaceId } from '../../usage/platform-workspace';
 import {
   readCategoryMapping,
   writeCategoryMapping,
@@ -191,7 +193,7 @@ export async function mapTrend(
   const bestRuleScore = evidence[0]?.score ?? 0;
 
   if (bestRuleScore < NEEDS_REVIEW_BELOW && !options.skipLlm && hasAiProvider()) {
-    const llm = await classifyWithLlm(trend, taxonomy, bySlug, logger);
+    const llm = await classifyWithLlm(db, trend, taxonomy, bySlug, logger);
 
     if (llm.length > 0) {
       method = 'llm';
@@ -290,35 +292,50 @@ function hasAiProvider(): boolean {
  * Failure is swallowed to a log line on purpose: docs/07 requires a failing source to
  * degrade the feed rather than break it, and an unreachable model must not take down a
  * curation run that had perfectly good rule matches in hand.
+ *
+ * **`BudgetExceededError` is the one exception, and it is rethrown.** ADR-0011 names this
+ * as the thing not to get wrong: swallowing it would turn an engaged spend fuse into a
+ * curation run that quietly produces worse mappings, every cycle, until someone notices
+ * the quality drop and goes looking for a model regression that is not there. Exhaustion
+ * has to be loud.
+ *
+ * Classification is platform-global work — trends are not owned by a tenant (ADR-0010) —
+ * so it is metered against the reserved `platform` workspace rather than any client.
  */
 async function classifyWithLlm(
+  db: Db,
   trend: TrendWithRelations,
   taxonomy: { entries: TaxonomyEntry[] },
   bySlug: Map<string, TaxonomyEntry>,
   logger: ReturnType<typeof getLogger>,
 ): Promise<TrendCategoryMapping['evidence']> {
   try {
-    const result = await generateStructured({
-      purpose: 'trend_summarize',
-      schema: LlmClassificationSchema,
-      schemaName: 'TrendCategoryClassification',
-      temperature: 0,
-      input: {
-        trends: [
-          `Trend: ${trend.title}`,
-          trend.description ? `Description: ${trend.description}` : '',
-          '',
-          'Score this trend against the small-business categories below. Return only',
-          'categories a business of that kind could plausibly post about this week.',
-          'Use the exact slug. Score 0..1. Give a short concrete reason for each.',
-          'Return nothing rather than guessing if none fit.',
-          '',
-          taxonomy.entries.map((e) => `${e.slug} — ${e.name}`).join('\n'),
-        ]
-          .filter(Boolean)
-          .join('\n'),
+    const workspaceId = await getPlatformWorkspaceId(db);
+
+    const result = await generateStructuredMetered(
+      { db, workspaceId },
+      {
+        purpose: 'trend_summarize',
+        schema: LlmClassificationSchema,
+        schemaName: 'TrendCategoryClassification',
+        temperature: 0,
+        input: {
+          trends: [
+            `Trend: ${trend.title}`,
+            trend.description ? `Description: ${trend.description}` : '',
+            '',
+            'Score this trend against the small-business categories below. Return only',
+            'categories a business of that kind could plausibly post about this week.',
+            'Use the exact slug. Score 0..1. Give a short concrete reason for each.',
+            'Return nothing rather than guessing if none fit.',
+            '',
+            taxonomy.entries.map((e) => `${e.slug} — ${e.name}`).join('\n'),
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        },
       },
-    });
+    );
 
     return (
       result.data.categories
@@ -333,6 +350,8 @@ async function classifyWithLlm(
         }))
     );
   } catch (error) {
+    if (isBudgetExceededError(error)) throw error;
+
     logger.warn(
       { trendId: trend.id, error: error instanceof Error ? error.message : 'unknown' },
       'LLM category classification failed; falling back to rule matches only',
