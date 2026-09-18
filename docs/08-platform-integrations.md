@@ -1,6 +1,8 @@
 # 08 — Platform integrations
 
-> **Status:** proposed.
+> **Status:** partially implemented — the adapter contract, the registry, the error
+> taxonomy and the **X** adapter have landed (W6 PR 1). Facebook, Instagram and Threads
+> are still proposed.
 > **v1 targets:** Instagram, Facebook, Threads, X.
 > **Credentials:** clients bring their own platform app credentials.
 > See [ADR-0005](./adr/0005-v1-platform-targets.md), [ADR-0009](./adr/0009-byo-platform-credentials.md),
@@ -305,3 +307,43 @@ OAuth 2.0; lands quickly once the adapter interface is stable.
 **TikTok** — requires its own app review, and content-posting has additional requirements.
 Its value is high for the trend engine even before publishing works, since TikTok is where
 formats originate.
+
+## Implementation notes (W6 PR 1)
+
+### The adapter contract is credential-first
+
+Every `PlatformAdapter` method takes a resolved credential as its first argument. No
+adapter reads `process.env`, and none of them touches the database — `getAuthUrl` receives
+a `persistRequestToken` sink rather than writing the OAuth 1.0a request token itself. That
+keeps ADR-0009 enforceable by inspection rather than by discipline.
+
+### X pre-flight cannot report write permission
+
+`introspect()` on X reports every capability as supported. This is a real limitation, not
+an oversight: OAuth 1.0a has no scopes, so there is nothing to compare a requirement
+against. The credential's *access level* (read vs. read-write) lives in the X developer
+portal and is not exposed on any endpoint we can call cheaply.
+
+The consequence is that a read-only X app passes pre-flight and fails at publish time. It
+fails *well* — X returns a 403 whose body says the app is not configured for writes, and
+`classifyPlatformError` matches that message before it matches the status, so it is
+classified `CREDENTIAL` rather than `POLICY`, marks the target `BLOCKED` rather than
+`FAILED`, and tells the user to check their app's access level. But the report is
+optimistic, and a connections page must not present a green X tick as proof that posting
+will work.
+
+`evaluateCapabilities` returns "supported" for a scopeless protocol deliberately, for the
+same reason: reporting "unsupported" because the granted-scope list is empty would make
+every correctly configured X credential look broken.
+
+### Message rules run before status rules
+
+`classifyPlatformError` checks the error text before the HTTP status. A 403 from X means
+"read-only app" (a credential problem the user can fix) far more often than it means
+"forbidden action" (a policy problem they cannot). Classifying on status alone would send
+every one of those to the wrong place. A 429 is the exception and always wins, because
+rate limiting is never anything but transient.
+
+One detail worth keeping: on `twitter-api-v2` the HTTP status is on `.code`, not
+`.status`, and the useful text is on `.data.detail` — `.message` is a generic wrapper.
+Classifying on `.message` alone means the read-only rule never fires at all.

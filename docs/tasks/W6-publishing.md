@@ -76,20 +76,29 @@ partial-failure handling.
 
 ## Acceptance criteria
 
-- [ ] A credential is stored encrypted; **no API path returns the secret**, and no log line
+PR 1 (the spine: schema, credentials, OAuth, X, pipeline, jobs) — landed:
+
+- [x] A credential is stored encrypted; **no API path returns the secret**, and no log line
       contains it (test this explicitly)
-- [ ] Pre-flight produces an accurate capability report, including the `INSUFFICIENT` case
-- [ ] OAuth connect completes using a client's app credentials, with signed state
-- [ ] A post publishes to X with media and records `externalPostId` + URL
-- [ ] Scheduling works; a scheduled post publishes at the right time after a restart
-- [ ] A forced failure on one target leaves others published and the post `PARTIALLY_PUBLISHED`
-- [ ] Retry does not double-post (integration test)
+- [x] Pre-flight produces an accurate capability report, including the `INSUFFICIENT` case
+- [x] OAuth connect completes using a client's app credentials, with signed state
+- [x] A post publishes to X with media and records `externalPostId` + URL
+- [x] Scheduling works; a scheduled post publishes at the right time after a restart —
+      verified structurally rather than by restarting a dyno: there is no in-memory timer,
+      so due-ness is recomputed from `scheduledFor`/`nextAttemptAt` in Postgres by a sweep
+      that runs on every boot, and pg-boss's queue is Postgres-backed too
+- [x] A forced failure on one target leaves others published and the post `PARTIALLY_PUBLISHED`
+- [x] Retry does not double-post (integration test)
+- [x] A scheduled post for a workspace **over its AI ceiling** still publishes, end to end —
+      the case W10 could only assert at the seam
+
+PR 2 (Meta family, health sweeps, Settings → Connections):
+
 - [ ] Expired tokens are refreshed via the correct credential; revoked accounts surface as
-      `REVOKED`
+      `REVOKED` — the adapter `refresh`/`validate` contract and the `REVOKED` → `BLOCKED`
+      publish path exist and are tested; the periodic sweep that calls them does not yet
 - [ ] Revoking a credential halts its jobs and marks dependent accounts
 - [ ] Meta adapters are complete and tested against faked responses
-- [ ] A scheduled post for a workspace **over its AI ceiling** still publishes, end to end —
-      the case W10 could only assert at the seam
 
 ## Notes
 

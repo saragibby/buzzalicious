@@ -65,3 +65,101 @@ export const CapabilityReportSchema = z
 export const CredentialCapabilitiesSchema = z.record(CapabilitySchema, CapabilityReportSchema);
 
 export type CredentialCapabilities = z.infer<typeof CredentialCapabilitiesSchema>;
+
+/**
+ * API input for entering or rotating a credential.
+ *
+ * Every secret field here is **write-only**: it can be sent, and it is never sent back.
+ * `CredentialView` below is the only shape that leaves the server, and it carries a mask
+ * rather than a value. docs/10 is explicit that a secret is not returned "not even to the
+ * workspace owner who entered it" — the owner already has it, and an API that will hand it
+ * over turns a read-only session hijack into a credential theft.
+ */
+export const CredentialSecretFields = [
+  'appSecret',
+  'directToken',
+  'directTokenSecret',
+  'systemUserToken',
+] as const;
+
+/**
+ * The platform enum on its own.
+ *
+ * Exported separately because `CredentialInputSchema` is a `ZodEffects` once its
+ * cross-field refinements are attached, and a `ZodEffects` has no `.shape` — so a route
+ * that needs to validate just a `:platform` path parameter cannot reach into it.
+ */
+export const PlatformSchema = z.enum([
+  'INSTAGRAM',
+  'FACEBOOK',
+  'THREADS',
+  'X',
+  'LINKEDIN',
+  'TIKTOK',
+  'YOUTUBE',
+]);
+
+export const CredentialInputSchema = z
+  .object({
+    platform: PlatformSchema,
+    mode: z.enum(['DIRECT_TOKEN', 'CLIENT_APP', 'PLATFORM_APP']),
+    label: z.string().min(1).max(120),
+    /** Null means the credential is shared across every brand in the workspace. */
+    brandId: z.string().uuid().nullable().default(null),
+    appId: z.string().min(1).max(200).optional(),
+    appSecret: z.string().min(1).max(500).optional(),
+    redirectUri: z.string().url().optional(),
+    directToken: z.string().min(1).max(4000).optional(),
+    directTokenSecret: z.string().min(1).max(4000).optional(),
+    systemUserToken: z.string().min(1).max(4000).optional(),
+    tokenExpiresAt: z.coerce.date().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.mode === 'CLIENT_APP' && (!value.appId || !value.appSecret)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['appSecret'],
+        message: 'CLIENT_APP mode requires both an app ID and an app secret',
+      });
+    }
+    if (value.mode === 'DIRECT_TOKEN' && !value.directToken && !value.systemUserToken) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['directToken'],
+        message: 'DIRECT_TOKEN mode requires a token',
+      });
+    }
+    // docs/10: a Meta DIRECT_TOKEN is a ~60-day bootstrap that cannot be refreshed without
+    // the app secret. Without a recorded expiry there is nothing to warn against, and
+    // publishing dies silently two months later.
+    if (
+      value.mode === 'DIRECT_TOKEN' &&
+      !value.tokenExpiresAt &&
+      ['INSTAGRAM', 'FACEBOOK', 'THREADS'].includes(value.platform)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tokenExpiresAt'],
+        message:
+          'A Meta DIRECT_TOKEN expires in about 60 days and cannot be refreshed without the app secret. Record its expiry so the platform can warn before it dies.',
+      });
+    }
+  });
+
+export type CredentialInput = z.infer<typeof CredentialInputSchema>;
+
+export const CredentialUpdateSchema = z
+  .object({
+    label: z.string().min(1).max(120).optional(),
+    appId: z.string().min(1).max(200).optional(),
+    appSecret: z.string().min(1).max(500).optional(),
+    redirectUri: z.string().url().optional(),
+    directToken: z.string().min(1).max(4000).optional(),
+    directTokenSecret: z.string().min(1).max(4000).optional(),
+    systemUserToken: z.string().min(1).max(4000).optional(),
+    tokenExpiresAt: z.coerce.date().nullable().optional(),
+  })
+  .strict();
+
+export type CredentialUpdate = z.infer<typeof CredentialUpdateSchema>;

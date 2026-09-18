@@ -71,6 +71,21 @@ export function applyTestEnv(): void {
     'AZURE_OPENAI_API_KEY',
     'AZURE_OPENAI_DEPLOYMENT',
     'AZURE_OPENAI_API_VERSION',
+    // W6 platform apps. Same reasoning, higher stakes: a test that reaches a *social*
+    // provider with a real key does not just cost money, it can post to a live account
+    // that belongs to a client. `docs/reference/x-oauth1a.md` came from a prototype whose
+    // X keys were read straight from the environment, so these names are exactly the ones
+    // a developer is likely to have sitting in `backend/.env`.
+    'TWITTER_API_KEY',
+    'TWITTER_API_SECRET',
+    'PLATFORM_APP_X_KEY',
+    'PLATFORM_APP_X_SECRET',
+    'META_APP_ID',
+    'META_APP_SECRET',
+    'PLATFORM_APP_META_ID',
+    'PLATFORM_APP_META_SECRET',
+    'PLATFORM_APP_THREADS_ID',
+    'PLATFORM_APP_THREADS_SECRET',
   ]) {
     process.env[key] = `test-fake-${key.toLowerCase().replace(/_/g, '-')}`;
   }
