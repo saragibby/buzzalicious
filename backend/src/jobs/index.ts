@@ -9,6 +9,7 @@ import {
   type HandlerDeps,
 } from './handlers/publish.handlers';
 import { handleAccountHealthSweep } from './handlers/health.handlers';
+import { handleMetricsSweep } from './handlers/metrics.handlers';
 import { QUEUE } from './queues';
 
 /**
@@ -78,6 +79,7 @@ export async function startWorker(): Promise<void> {
   await instance.createQueue(QUEUE.publishTarget);
   await instance.createQueue(QUEUE.publishSweep);
   await instance.createQueue(QUEUE.accountHealth);
+  await instance.createQueue(QUEUE.metricsPoll);
 
   await instance.work(QUEUE.publishTarget, async (jobs: Job<unknown>[]) => {
     for (const job of jobs) {
@@ -102,6 +104,18 @@ export async function startWorker(): Promise<void> {
   // interval only has to be small relative to that — hourly gives roughly 168 chances to
   // refresh a token before it expires, which survives a worker being down for a day.
   await instance.schedule(QUEUE.accountHealth, '0 * * * *');
+
+  await instance.work(QUEUE.metricsPoll, async () => {
+    await handleMetricsSweep({ db: getPrisma() });
+  });
+
+  // Every 15 minutes. The checkpoints are hours apart, so the tick only has to be small
+  // relative to the tightest of them — the 1h reading — for a snapshot to land close to
+  // the hour it claims. Finer would poll platform APIs harder for a reading whose
+  // `hoursSincePublish` would barely move; hourly would make the 1h checkpoint land
+  // anywhere in a two-hour band, and comparing a 1h reading with a 2h one as though both
+  // were "hour one" is exactly the error that survives review.
+  await instance.schedule(QUEUE.metricsPoll, '*/15 * * * *');
 
   log.info({ queues: Object.values(QUEUE) }, 'Worker started');
 }

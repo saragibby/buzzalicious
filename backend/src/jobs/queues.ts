@@ -20,6 +20,7 @@ export const QUEUE = {
   publishSweep: 'publish.sweep',
   credentialValidate: 'credential.validate',
   accountHealth: 'account.health',
+  metricsPoll: 'metrics.poll',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
