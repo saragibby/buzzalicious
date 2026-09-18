@@ -61,18 +61,22 @@ export class RenderOverflowError extends AppError {
  * headline with a hole in it and no indication why. See `fonts.ts` for the coverage we
  * actually ship (`latin-ext` plus the emoji set).
  */
+export interface UnrenderableDetail {
+  /** Where the text came from — a slot key, or a brand field. */
+  field: string;
+  /** The distinct graphemes in that field nothing can draw. */
+  characters: string[];
+}
+
 export class UnrenderableTextError extends AppError {
   readonly code = 'VALIDATION_FAILED' as const;
   readonly status = 400;
 
   constructor(
-    readonly graphemes: string[],
-    options?: { slot?: string; cause?: unknown },
+    message: string,
+    readonly offences: UnrenderableDetail[],
+    options?: { cause?: unknown },
   ) {
-    super(
-      `No available font can render ${graphemes.map((g) => JSON.stringify(g)).join(', ')}` +
-        (options?.slot ? ` in "${options.slot}"` : ''),
-      { details: { graphemes, slot: options?.slot }, cause: options?.cause },
-    );
+    super(message, { details: { offences }, cause: options?.cause });
   }
 }

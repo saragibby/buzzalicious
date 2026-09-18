@@ -2,6 +2,7 @@ import { Resvg } from '@resvg/resvg-js';
 import satori from 'satori';
 import sharp from 'sharp';
 import type { AspectRatio } from '@prisma/client';
+import { loadEmojiAsset } from './emoji';
 import { loadFonts } from './fonts';
 import { RenderError } from './render.errors';
 import { specFor, type RenderedImage, type RenderedPreview, type Renderer } from './renderer';
@@ -40,7 +41,13 @@ export const PREVIEW_SCALE = 1 / 3;
 export interface SatoriRenderOptions {
   /** Nodes whose text `$fit` shrank, passed through to `Rendition.rendererMeta`. */
   fittedDown?: string[];
-  /** Resolve an image or emoji Satori asks for. Never performs network I/O. */
+  /**
+   * Resolve an asset Satori asks for — in practice an emoji it has no glyph for.
+   *
+   * Defaults to the vendored Twemoji bundle. Never performs network I/O, in either the
+   * default or an override: ADR-0002 requires renders to be deterministic and docs/12
+   * forbids tests from touching the network.
+   */
   loadAdditionalAsset?: (code: string, segment: string) => Promise<string>;
 }
 
@@ -71,7 +78,7 @@ export class SatoriRenderer implements Renderer {
         width,
         height,
         fonts,
-        loadAdditionalAsset: options.loadAdditionalAsset,
+        loadAdditionalAsset: options.loadAdditionalAsset ?? loadEmojiAsset,
       });
     } catch (cause) {
       throw new RenderError(`Satori failed to build the SVG: ${String(cause)}`, { cause });

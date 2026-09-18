@@ -17,7 +17,9 @@
     "db:push": "prisma db push",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "ts-node prisma/seed.ts",
-    "fonts:vendor": "ts-node scripts/vendor-fonts.ts"
+    "fonts:vendor": "ts-node scripts/vendor-fonts.ts",
+    "emoji:vendor": "ts-node scripts/vendor-emoji.ts",
+    "render:sample": "ts-node scripts/render-sample.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.716.0",
