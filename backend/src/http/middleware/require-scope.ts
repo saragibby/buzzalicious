@@ -97,6 +97,9 @@ export function requireBrand(
  */
 export function brandOf(req: Request): BrandAccess {
   if (!req.brand) {
+    // A developer mistake, not a client one: a bare Error becomes a non-exposed 500,
+    // which is exactly the right outcome.
+    // eslint-disable-next-line no-restricted-syntax
     throw new Error('This route reads a brand scope but is not mounted behind requireBrand()');
   }
   return req.brand;
@@ -104,6 +107,7 @@ export function brandOf(req: Request): BrandAccess {
 
 export function workspaceOf(req: Request): WorkspaceAccess {
   if (!req.workspace) {
+    // eslint-disable-next-line no-restricted-syntax -- see brandOf above
     throw new Error(
       'This route reads a workspace scope but is not mounted behind requireWorkspace()',
     );
