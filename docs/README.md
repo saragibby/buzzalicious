@@ -61,6 +61,7 @@ relitigate them without updating the ADR.
 | Multi-brand | `Brand` is first-class in the v1 schema | [0008](./adr/0008-brand-first-class.md) |
 | Platform credentials | Dual mode; clients bring their own app credentials first | [0009](./adr/0009-byo-platform-credentials.md) |
 | Tenancy | Workspace per client; trends + templates shared | [0010](./adr/0010-workspace-per-client.md) |
+| Usage & AI spend | Append-only meter now; per-workspace AI ceiling as a fuse | [0011](./adr/0011-usage-metering-spine.md) |
 
 ## Working agreements
 

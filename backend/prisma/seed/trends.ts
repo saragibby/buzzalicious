@@ -26,7 +26,7 @@ interface TrendSpec {
   status: TrendStatus;
   velocity: number;
   momentum: number;
-  /** Observation window, oldest first, as `[daysAgo, mentions]`. */
+  /** Observation window, oldest first, as `[daysAgo, volume]`. */
   observations: [number, number][];
   categories: { slug: string; score: number }[];
   exampleUrls: string[];
@@ -224,17 +224,20 @@ export async function seedTrends(db: Db, now: Date): Promise<number> {
 
     await db.trend.upsert({ where: { id }, create: { id, ...data }, update: data });
 
-    for (const [daysAgo, mentions] of spec.observations) {
+    for (const [daysAgo, volume] of spec.observations) {
       const signalId = seedId('trend-signal', spec.key, String(daysAgo));
       const observedAt = new Date(now.getTime() - daysAgo * DAY_MS);
       const signal = {
         trendId: id,
         collectorId: 'seed',
         observedAt,
+        // Names come from TrendSignalMetricsSchema, which is the contract for this
+        // column. Anything a real collector calls something else gets normalised at the
+        // collector boundary; the verbatim payload belongs in `Trend.raw`, not here.
         metrics: {
-          mentions,
-          uniqueAuthors: jitter(rng, Math.round(mentions * 0.62), 0.15),
-          engagements: jitter(rng, mentions * 4, 0.25),
+          volume,
+          uniqueAuthors: jitter(rng, Math.round(volume * 0.62), 0.15),
+          engagement: jitter(rng, volume * 4, 0.25),
           sampleSize: spec.observations.length,
         },
       };

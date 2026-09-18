@@ -21,7 +21,14 @@ export default defineWorkspace([
       globalSetup: ['./tests/global-setup.ts'],
       // Database tests share one Postgres. Running the files in parallel against it makes
       // failures depend on interleaving, which is the worst kind of flake to chase.
+      //
+      // `fileParallelism` is a root-level option and is silently ignored inside a
+      // workspace project, so it was never actually in effect — two files calling
+      // `seedAll` concurrently interleaved their writes. `singleFork` is per-project and
+      // genuinely serializes the files into one process. Kept alongside it because it is
+      // correct at the root and harmless here.
       fileParallelism: false,
+      poolOptions: { forks: { singleFork: true } },
     },
   },
   {

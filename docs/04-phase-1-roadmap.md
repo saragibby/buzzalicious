@@ -40,6 +40,7 @@ Each workstream has a brief in [`tasks/`](./tasks/) sized for one agent session.
 | **W7** | Outcome spine (short links + metrics) | W2, W6 | partially |
 | **W8** | Feedback loop v0 | W4, W7 | no |
 | **W9** | Trend engine v0 | W2 | yes |
+| **W10** | Usage metering & AI spend fuse | W2, W3 | yes (with W4, W5) |
 
 ```mermaid
 flowchart TD
@@ -53,6 +54,7 @@ flowchart TD
     W7["W7 · Outcome spine"]
     W8["W8 · Feedback loop v0"]
     W9["W9 · Trend engine v0"]
+    W10["W10 · Usage metering<br/>+ AI spend fuse"]
     APPROVE["Buzzalicious read-only app<br/>(external, blocks W9 step 7 only)"]
 
     W0 --> W2
@@ -69,6 +71,8 @@ flowchart TD
     W4 --> W8
     W7 --> W8
     W9 --> W5
+    W3 --> W10
+    W10 -.->|meter publishing from day one| W6
 
     style APPROVE stroke-dasharray: 5 5
 ```

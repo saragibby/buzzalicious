@@ -56,15 +56,34 @@ Meta-approval critical path.
 
 ## Acceptance criteria
 
-- [ ] Trends can be curated manually and appear in the feed
-- [ ] Scoring produces sensible velocity/momentum and lifecycle transitions over seeded signals
-- [ ] Category mapping assigns plausible scores; low-confidence results flagged for review
-- [ ] Feeds for brands in different categories differ substantially
-- [ ] Every surfaced trend carries an explanation **and a concrete suggested angle** — a
+- [x] Trends can be curated manually and appear in the feed
+- [x] Scoring produces sensible velocity/momentum and lifecycle transitions over seeded signals
+- [x] Category mapping assigns plausible scores; low-confidence results flagged for review
+- [x] Feeds for brands in different categories differ substantially
+- [x] Every surfaced trend carries an explanation **and a concrete suggested angle** — a
       trend without a usable idea attached is just noise, and removing the blank-page
       problem is the whole point
-- [ ] Re-running scoring over history is possible and tested
+- [x] Re-running scoring over history is possible and tested
 - [ ] One automated collector runs on a cron with backoff and rate-limit handling
+
+### v0 status — steps 1–6 shipped, step 7 deliberately not started
+
+Everything above except the last line is implemented and covered by tests; the
+database-backed proofs live in `backend/tests/db/trend.test.ts` and opt in via
+`TEST_DATABASE_URL`.
+
+Step 7 was **not started, by instruction**. It needs external API access that is not
+confirmed to exist, and open question [Q6](../09-open-questions.md) (TikTok ToS) is
+unresolved. TikTok is not referenced anywhere in the module, including the keyword
+vocabulary. Steps 8 and 9 remain out of scope for v0 — 9 depends on W7.
+
+Two gaps worth naming, both needing routing rather than a decision here:
+
+- **Rescoring has no schedule.** pg-boss is deferred to W6, so recompute is triggered from
+  the curation UI. It wants a cron once the job system lands.
+- **Storage deviation.** Curated angles and mapping confidence/method/review state are
+  namespaced under `Trend.raw` because no columns exist for them and `schema.prisma` is
+  W2-owned. See `backend/src/modules/trend/README.md`.
 
 ## Notes
 

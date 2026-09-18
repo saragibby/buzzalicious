@@ -212,6 +212,15 @@ possibly the basis for unlimited-posts positioning against Predis.ai's post limi
 
 Worth deciding before building any billing, so metering hooks land in the right places.
 
+**Metering is no longer blocked on this.** [ADR-0011](./adr/0011-usage-metering-spine.md)
+lands an append-only `UsageEvent` meter ahead of any pricing decision, precisely because
+metered history cannot be backfilled — so whenever this question is answered, there will be
+real usage distribution to set tier limits from rather than guesswork.
+[W10](./tasks/W10-usage-metering.md) records quantity and provider cost separately, keeping
+per-tier margin visible. Note the strategic thread above: if near-free Satori rendering
+supports unlimited-posts positioning, AI is the only genuinely scarce per-tenant resource,
+which would make the AI ceiling and the subscription tier the same mechanism.
+
 ### Q17 — Is AI image generation in v1 scope?
 
 Surfaced by the audit ([11](./11-source-material.md)). Tax Dedux generates post images with
@@ -275,16 +284,25 @@ needs an answer about who warrants the rights.
 Emoji licensing is settled separately under [Q9](#q9--emoji-rendering-in-satori), and it
 *does* carry an attribution obligation.
 
-### Q20 — AI provider and spend controls
+### Q20 — AI provider and spend controls — **RESOLVED: meter now, cap as a fuse**
 
 Both existing apps call LLMs with no per-tenant spend cap visible. With multiple workspaces
 generating content, an unbounded loop or an enthusiastic client is a direct financial
 liability.
 
-Decide: which provider and model tier, per-workspace budgets, what happens at the cap
-(queue, degrade, refuse), and whether generation cost is metered for future billing
-([Q13](#q13--pricing-model)). The existing `AiGeneration` telemetry model gives somewhere to
-record it.
+**Resolved by [ADR-0011](./adr/0011-usage-metering-spine.md), built in
+[W10](./tasks/W10-usage-metering.md).** An append-only `UsageEvent` meter for the whole
+platform lands now, because metered history cannot be backfilled and paid tiers are a
+stated destination. Enforcement is deliberately crude: a per-workspace monthly AI cost
+ceiling, checked before each call, refusing generation with `BudgetExceededError` while
+never blocking an already-scheduled post. Billing-grade data, fuse-grade enforcement.
+
+Audit findings that shaped it: `AiGeneration` had **zero write sites**, the OpenAI provider
+read token usage and discarded it, Gemini captured none, and the riskiest call site
+(`mapping.service.ts`, one LLM call per trend) swallows errors by design — so a budget cap
+would have engaged invisibly.
+
+Still open: which provider and model tier per purpose, and the ceiling's actual value.
 
 ### Q21 — *(resolved above)*
 
@@ -309,8 +327,9 @@ the difference between templates being an asset and being a bottleneck. Not v1 b
 but it should shape the layout format now: a format that's pleasant to hand-write is not
 necessarily one a visual editor can round-trip.
 
-## Resolved during planning (2026-09-17)
+## Resolved decisions
 
+Planning decisions are dated 2026-09-17; later entries are dated in their ADR.
 For traceability — full reasoning in the linked ADRs.
 
 | Question | Resolution |
@@ -325,6 +344,7 @@ For traceability — full reasoning in the linked ADRs.
 | Multi-brand timing | `Brand` first-class in v1 schema ([0008](./adr/0008-brand-first-class.md)) |
 | Whose platform credentials | Dual mode; `DIRECT_TOKEN` + `CLIENT_APP` ([0009](./adr/0009-byo-platform-credentials.md)) |
 | Tenancy model | Workspace per client; trends + templates shared ([0010](./adr/0010-workspace-per-client.md)) |
+| AI spend controls | Meter now, per-workspace ceiling as a fuse ([0011](./adr/0011-usage-metering-spine.md)) |
 | Hosting | Heroku ([Q4](#q4--hosting-provider--resolved-heroku)) |
 | Encryption key custody | Heroku config var for v1, KMS-ready ([Q14](#q14--key-management-for-client-app-secrets--resolved-heroku-config-var)) |
 | Instagram link strategy | Hosted link-in-bio page per brand ([Q5](#q5--instagram-link-strategy--resolved-link-in-bio-page)) |
