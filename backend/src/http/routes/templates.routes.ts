@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { AspectRatio, TemplateKind } from '@prisma/client';
 import { getPrisma } from '../../platform/db';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../platform/errors';
 import { requireAuth } from '../middleware/require-auth';
@@ -11,6 +12,11 @@ import {
 import { rankTemplates } from '../../modules/template/relevance';
 import { previewRender } from '../../modules/render/render.service';
 import { ALL_ASPECT_RATIOS } from '../../modules/render/renderer';
+import {
+  SUPPORTED_PLATFORMS,
+  isSupportedPlatform,
+  ratiosForPlatforms,
+} from '../../modules/template/platform-spec';
 
 /**
  * The template registry, and the composer's live preview.
@@ -41,8 +47,34 @@ const ListQuerySchema = z.object({
   categoryId: z.string().uuid().optional(),
   archetype: z.string().min(1).optional(),
   aspectRatio: AspectRatioSchema.optional(),
+  kind: z.nativeEnum(TemplateKind).optional(),
+  /**
+   * Comma-separated platforms, e.g. `platform=INSTAGRAM,THREADS`.
+   *
+   * Filters to templates offering at least one ratio *some* named platform accepts. The
+   * gallery's question is "can I post this to Instagram", not "does this template offer
+   * every shape Instagram will take".
+   */
+  platform: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
+
+function platformRatios(value: string | undefined): AspectRatio[] | undefined {
+  if (!value) return undefined;
+
+  const platforms = value
+    .split(',')
+    .map((name) => name.trim().toUpperCase())
+    .filter(isSupportedPlatform);
+
+  if (platforms.length === 0) {
+    // An unrecognised platform is a caller mistake, and silently returning the unfiltered
+    // gallery would present templates as postable to a platform nobody checked.
+    throw new ValidationError(`Unknown platform. Supported: ${SUPPORTED_PLATFORMS.join(', ')}`);
+  }
+
+  return ratiosForPlatforms(platforms);
+}
 
 const PreviewBodySchema = z.object({
   brandId: z.string().uuid(),
@@ -63,7 +95,9 @@ export function createTemplatesRouter(): Router {
         const templates = await rankTemplates(getPrisma(), {
           categoryId: query.categoryId,
           archetype: query.archetype,
+          kind: query.kind,
           aspectRatios: query.aspectRatio ? [query.aspectRatio as never] : undefined,
+          anyAspectRatios: platformRatios(query.platform),
           limit: query.limit,
         });
 

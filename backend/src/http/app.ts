@@ -11,6 +11,7 @@ import { createAuthRouter } from './routes/auth.routes';
 import { createBrandRouter, multerErrorHandler } from './routes/brand.routes';
 import { createHealthRouter } from './routes/health.routes';
 import { createFilesRouter, shouldMountFilesRouter } from './routes/files.routes';
+import { createPlatformRouter, createPostRouter } from './routes/post.routes';
 import { createTemplatesRouter } from './routes/templates.routes';
 import { createTrendRouter } from './routes/trend.routes';
 import { createTrendAdminRouter } from './routes/trend-admin.routes';
@@ -91,6 +92,13 @@ export function createApp(): Application {
   app.use('/api/trends', createTrendRouter());
   app.use('/api/admin/trends', createTrendAdminRouter());
   app.use('/api/admin/usage', createUsageAdminRouter());
+
+  // W5. Composer drafts hang off a brand, so the path carries `:brandId` and the router
+  // resolves it with `requireBrand()` itself — `mergeParams` is what makes that work.
+  // Mounted after the brand router: Express falls through a prefix match that no route in
+  // that router claims, and `/:brandId/posts` is not one of its routes.
+  app.use('/api/brands/:brandId/posts', createPostRouter());
+  app.use('/api/platforms', createPlatformRouter());
 
   // W6. Credentials are workspace-level; scheduling and publishing are per brand. The
   // OAuth router is mounted last and outside `/api` because its callback leg is a browser

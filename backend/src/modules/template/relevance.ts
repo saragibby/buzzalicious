@@ -16,7 +16,7 @@
  * on `(categoryId, weight)` and the alternative is loading every template on every request.
  */
 
-import type { AspectRatio, TemplateStatus } from '@prisma/client';
+import type { AspectRatio, TemplateKind, TemplateStatus } from '@prisma/client';
 import type { Db } from '../../platform/db';
 
 /**
@@ -44,6 +44,7 @@ export interface RankedTemplate {
   name: string;
   description: string | null;
   archetype: string;
+  kind: TemplateKind;
   supportedRatios: AspectRatio[];
   version: number;
   /** Combined relevance. Not normalised — only the ordering is meaningful. */
@@ -58,7 +59,16 @@ export interface RelevanceQuery {
   categoryId?: string;
   /** Restrict to templates supporting every listed ratio. */
   aspectRatios?: AspectRatio[];
+  /**
+   * Restrict to templates supporting *at least one* listed ratio.
+   *
+   * Distinct from `aspectRatios` on purpose. "Templates I could post to Threads" means
+   * templates offering some ratio Threads accepts, not every one — requiring all of them
+   * would drop any template that omits a single ratio, which is most of them.
+   */
+  anyAspectRatios?: AspectRatio[];
   archetype?: string;
+  kind?: TemplateKind;
   status?: TemplateStatus;
   limit?: number;
 }
@@ -102,7 +112,17 @@ export async function rankTemplates(db: Db, query: RelevanceQuery): Promise<Rank
     where: {
       status: query.status ?? 'PUBLISHED',
       ...(query.archetype ? { archetype: query.archetype } : {}),
-      ...(query.aspectRatios?.length ? { supportedRatios: { hasEvery: query.aspectRatios } } : {}),
+      ...(query.kind ? { kind: query.kind } : {}),
+      // Both filters live on one column, so they are merged rather than spread — two
+      // spreads would silently drop whichever came first.
+      ...(query.aspectRatios?.length || query.anyAspectRatios?.length
+        ? {
+            supportedRatios: {
+              ...(query.aspectRatios?.length ? { hasEvery: query.aspectRatios } : {}),
+              ...(query.anyAspectRatios?.length ? { hasSome: query.anyAspectRatios } : {}),
+            },
+          }
+        : {}),
     },
     select: {
       id: true,
@@ -110,6 +130,7 @@ export async function rankTemplates(db: Db, query: RelevanceQuery): Promise<Rank
       name: true,
       description: true,
       archetype: true,
+      kind: true,
       supportedRatios: true,
       version: true,
     },

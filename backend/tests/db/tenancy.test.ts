@@ -15,6 +15,7 @@ import {
   withTenantScope,
 } from '../../src/platform/tenancy';
 import { ForbiddenError, NotFoundError } from '../../src/platform/errors';
+import { updateBrand } from '../../src/modules/brand/brand.service';
 import { hasTestDatabase } from '../env';
 
 /**
@@ -344,6 +345,64 @@ describe.skipIf(!hasTestDatabase)('tenancy isolation', () => {
       const account = await scoped.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
 
       expect(account.accessToken).toBe(PLAINTEXT_TOKEN);
+    });
+  });
+  describe('scoped writes actually execute', () => {
+    /**
+     * The plan-shape tests in `src/platform/tenancy.test.ts` assert what the extension
+     * produces. They cannot tell whether Prisma accepts it — and for a long time it did
+     * not: the scope was injected as `where: { AND: [{ id }, { brandId }] }`, which has no
+     * unique field at the top level, so *every* scoped `update`, `delete` and `upsert` in
+     * the application threw `PrismaClientValidationError` at runtime. `updateBrand` and
+     * `deleteBrand` were both dead on `main` and nothing noticed, because no test ever ran
+     * one against a database.
+     *
+     * These tests exist to make that class of failure impossible to reintroduce: they run
+     * the real calls through a real scoped client.
+     */
+    it('updates a row through a brand-scoped client', async () => {
+      const { db: scoped } = await requireBrandAccess(RISE.ownerId, RISE.brandId);
+      const before = await scoped.brand.findUniqueOrThrow({ where: { id: RISE.brandId } });
+
+      const updated = await updateBrand(scoped, RISE.brandId, { timezone: 'America/New_York' });
+      expect(updated.timezone).toBe('America/New_York');
+
+      await updateBrand(scoped, RISE.brandId, { timezone: before.timezone });
+    });
+
+    it('refuses the same update for another tenant’s row', async () => {
+      const { db: scoped } = await requireBrandAccess(RISE.ownerId, RISE.brandId);
+
+      // Positive control above; this is the boundary. Prisma reports "record not found",
+      // which is the intended outcome — the scope makes the row invisible rather than
+      // forbidden.
+      await expect(
+        scoped.brand.update({
+          where: { id: TAXDEDUX.brandId },
+          data: { timezone: 'America/New_York' },
+        }),
+      ).rejects.toThrow();
+
+      const untouched = await getPrisma().brand.findUniqueOrThrow({
+        where: { id: TAXDEDUX.brandId },
+      });
+      expect(untouched.timezone).not.toBe('America/New_York');
+    });
+
+    it('deletes a row through a brand-scoped client', async () => {
+      const { db: scoped } = await requireBrandAccess(RISE.ownerId, RISE.brandId);
+
+      const asset = await scoped.asset.create({
+        data: {
+          kind: 'PHOTO',
+          storageKey: `tenancy-write-probe-${Date.now()}`,
+          mimeType: 'image/png',
+          bytes: 1,
+          brand: { connect: { id: RISE.brandId } },
+        },
+      });
+
+      await expect(scoped.asset.delete({ where: { id: asset.id } })).resolves.toBeTruthy();
     });
   });
 });
