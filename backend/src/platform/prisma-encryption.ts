@@ -30,6 +30,9 @@ import { getEncryptor, type Encryptor } from './crypto';
 export const ENCRYPTED_FIELDS = {
   SocialAccount: ['accessToken', 'refreshToken', 'tokenSecret'],
   PlatformCredential: ['appSecret', 'directToken', 'directTokenSecret', 'systemUserToken'],
+  // The OAuth 1.0a request-token secret from leg 1. Short-lived, but it is a secret for
+  // as long as it exists and the handshake row outlives the request that created it.
+  OAuthHandshake: ['requestTokenSecret'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type EncryptedModel = keyof typeof ENCRYPTED_FIELDS;

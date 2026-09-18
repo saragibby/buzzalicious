@@ -38,6 +38,7 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.13.1",
+    "pg-boss": "^12.33.1",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
     "satori": "^0.33.4",

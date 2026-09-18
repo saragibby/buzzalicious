@@ -177,17 +177,17 @@ branch to merge is fine, and the second and third are the ones exposed. So:
   `gh run list --branch <branch>`. A PR reporting `MERGEABLE` / `CLEAN` with no runs is
   the signature.
 
-## Current state (end of M3)
+## Current state (end of M3, plus the W6 spine)
 
-507 tests across 49 files.
+608 tests across 58 files.
 
-Running without a database, 424 of them: crypto round-trip and tamper detection, the
+Running without a database, 503 of them: crypto round-trip and tamper detection, the
 Prisma encryption extension against a mock, config validation, the storage driver and its
 signed URLs, local-to-UTC time conversion across DST, the HTTP error boundary and app
 smoke tests, the AI prompt and parse layer, every JSON column's Zod contract, and the
 frontend auth guard and API client.
 
-With `TEST_DATABASE_URL` set, 83 more in `backend/tests/db/`:
+With `TEST_DATABASE_URL` set, 105 more in `backend/tests/db/`:
 
 - **`encryption.test.ts`** — that the stored column is ciphertext, asserted with
   `$queryRaw` against the raw value. A round-trip through our own codec passes even when
@@ -210,6 +210,18 @@ With `TEST_DATABASE_URL` set, 83 more in `backend/tests/db/`:
   tenancy case: a `ScopeRule` returning `{}` is *no filter*, not a deny, so that test
   asserts on **which** workspaces come back rather than on a count, with the other
   workspace's rows guaranteed present at the time of the read.
+- **`publishing.test.ts`** — the W6 spine. `OAuthHandshake` tenancy under **both** scope
+  kinds, plus the case neither of those can see on its own: a *workspace-shared*
+  credential has `brandId: null`, so scoping a handshake through its credential rather
+  than through its own `brandId` leaks every sibling brand's in-flight handshake. That
+  third test is the one that found a real leak in this workstream's first rule. Also the
+  resolver's three-tier precedence asserted on identity with a rival credential present,
+  the access log written on every decrypt, the request-token secret proved to be
+  ciphertext via `$queryRaw`, single-use handshake consumption, and the publish pipeline:
+  metering exactly once with an attempt-independent key, idempotency across a redelivered
+  job, `BLOCKED` rather than `FAILED` on a revoked account, backoff that the sweep
+  actually respects, terminal validation failures, `PARTIALLY_PUBLISHED` roll-up, and a
+  workspace **over its AI ceiling** still publishing end to end.
 - **`usage-admin-serialization.test.ts`** — that the admin response actually serializes.
   `quantity` is a `BigInt` and `JSON.stringify` throws on one, so a field later returned
   straight from Prisma would fail at runtime, only on a populated database. Real read

@@ -112,6 +112,24 @@ export const TENANT_MODELS = {
     workspace: (workspaceId) => ({ credential: { workspaceId } }),
   },
 
+  // In-flight OAuth authorizations (W6). Reached through the credential they will use for
+  // the code exchange, so they inherit that model's shape exactly — including the
+  // workspace-shared (`brandId: null`) credential being visible to a brand-scoped read,
+  // because connecting an account under a shared app is the ordinary case.
+  //
+  // The callback itself arrives unauthenticated from the platform and looks a handshake up
+  // through the *unscoped* client; that is genuine system work, and the row's own
+  // `credentialId` is what re-establishes the tenant afterwards.
+  OAuthHandshake: {
+    // The handshake's OWN brandId, not its credential's. A workspace-shared credential
+    // has `brandId: null` and every brand in the workspace connects through it, so routing
+    // this through the credential makes each brand's in-flight handshake — including its
+    // encrypted request-token secret — visible to every sibling brand. The handshake is
+    // initiated by one brand for one brand; that column is the authority.
+    brand: (brandId) => ({ brandId }),
+    workspace: (workspaceId) => ({ credential: { workspaceId } }),
+  },
+
   // The usage meter (ADR-0011). Workspace-owned: the workspace is the billing entity, so
   // an unscoped read here would show one client another's spend. `UsageEvent.brandId` is
   // nullable because platform-global work has no brand, which makes it the same shape as

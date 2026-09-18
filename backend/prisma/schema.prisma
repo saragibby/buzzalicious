@@ -27,14 +27,15 @@ datasource db {
 // ─── Identity & tenancy ──────────────────────────────────────────────────────────
 
 model User {
-  id          String       @id @default(uuid())
-  email       String       @unique
+  id          String           @id @default(uuid())
+  email       String           @unique
   name        String?
-  googleId    String?      @unique
+  googleId    String?          @unique
   picture     String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   memberships Membership[]
+  handshakes  OAuthHandshake[]
 
   @@map("users")
 }
@@ -51,12 +52,12 @@ model Workspace {
   /// workspace escapes the fuse. Decimal because it is money.
   aiMonthlyCeilingUsd Decimal? @db.Decimal(10, 2)
 
-  memberships Membership[]
-  brands      Brand[]
-  credentials PlatformCredential[]
+  memberships  Membership[]
+  brands       Brand[]
+  credentials  PlatformCredential[]
   // Client-specific templates. Empty in v1; every seeded template is global.
-  templates   Template[]
-  usageEvents UsageEvent[]
+  templates    Template[]
+  usageEvents  UsageEvent[]
   usageRollups UsagePeriodRollup[]
 
   @@map("workspaces")
@@ -153,6 +154,7 @@ model Brand {
   credentials    PlatformCredential[]
   generations    AiGeneration[]
   usageEvents    UsageEvent[]
+  handshakes     OAuthHandshake[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId, deletedAt])
@@ -291,6 +293,7 @@ model PlatformCredential {
 
   socialAccounts SocialAccount[]
   accessLogs     CredentialAccessLog[]
+  handshakes     OAuthHandshake[]
 
   @@index([workspaceId, platform, status])
   @@index([status, tokenExpiresAt])
@@ -323,6 +326,49 @@ model CredentialAccessLog {
 
   @@index([credentialId, occurredAt])
   @@map("credential_access_logs")
+}
+
+/// Server-side state for an in-flight OAuth authorization (W6).
+///
+/// Exists because X's OAuth 1.0a callback returns `oauth_token` and `oauth_verifier` but
+/// **not** `oauth_token_secret`, and leg 3 cannot be completed without the secret issued
+/// in leg 1 (docs/reference/x-oauth1a.md). The prototype held that secret in an
+/// in-process `Map`, which loses every in-flight handshake on a restart and misses
+/// outright when Heroku routes the callback to a different dyno than served leg 1.
+///
+/// It is also where the signed `state` is anchored: the row carries the `credentialId`,
+/// so the callback knows whose app secret to use for the exchange, and `nonce` binds the
+/// redirect to the browser that started it. Single-use and TTL'd — an abandoned
+/// authorization must expire rather than sit holding a secret indefinitely.
+model OAuthHandshake {
+  id           String             @id @default(uuid())
+  credentialId String
+  credential   PlatformCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  platform     Platform
+
+  /// Which brand the resulting SocialAccount rows belong to.
+  brandId String
+  brand   Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  /// Signed into `state` and compared on the way back. Unique so a replay of a consumed
+  /// callback cannot start a second exchange.
+  nonce String @unique
+
+  /// OAuth 1.0a only. `requestToken` is the lookup key X returns on the callback;
+  /// `requestTokenSecret` is encrypted at rest by platform/prisma-encryption.ts.
+  requestToken       String? @unique
+  requestTokenSecret String?
+
+  initiatedByUserId String?
+  initiatedBy       User?   @relation(fields: [initiatedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([credentialId])
+  @@index([expiresAt])
+  @@map("oauth_handshakes")
 }
 
 // ─── Assets ──────────────────────────────────────────────────────────────────────
@@ -569,14 +615,22 @@ model PostTarget {
   rendition   Rendition? @relation(fields: [renditionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   scheduledFor   DateTime?
-  status         TargetStatus @default(DRAFT)
+  status         TargetStatus       @default(DRAFT)
   externalPostId String?
   externalUrl    String?
   publishedAt    DateTime?
-  attempts       Int          @default(0)
+  attempts       Int                @default(0)
   lastError      String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  /// Typed classification of `lastError` (docs/08). A free-text string cannot tell the
+  /// UI whether the client should reconnect one account or fix one app secret, and those
+  /// are different actions with very different blast radii.
+  errorClass     PublishErrorClass?
+  /// When the pipeline intends to try again. Set for a QUOTA deferral, where the rule is
+  /// "reschedule past the window rather than failing", and for a backed-off retry — the
+  /// user has to be able to see that a post is waiting rather than stuck.
+  nextAttemptAt  DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   metrics PostMetric[]
   usage   UsageEvent[]
@@ -639,6 +693,26 @@ enum TargetStatus {
   PUBLISHED
   FAILED
   CANCELLED
+  /// The credential or account this target needs is unusable, so the target was never
+  /// attempted. Distinct from FAILED on purpose (docs/10): revoking a credential must
+  /// halt scheduled posts visibly, and calling that a failure tells the client their
+  /// content was rejected when in fact it is waiting for them to reconnect.
+  BLOCKED
+}
+
+/// The error taxonomy from docs/08, as data.
+///
+/// CREDENTIAL is deliberately separate from AUTH: one is "this client's app secret is
+/// wrong", which one action fixes for every account minted by it, and the other is "this
+/// one account's token was revoked". Collapsing them makes the UI point at the wrong
+/// thing, which is how the prototype's single `lastError` string behaved.
+enum PublishErrorClass {
+  TRANSIENT
+  AUTH
+  CREDENTIAL
+  VALIDATION
+  POLICY
+  QUOTA
 }
 
 // ─── Outcomes: short links and metrics (docs/06) ─────────────────────────────────
@@ -783,7 +857,7 @@ model UsageEvent {
   /// one billable post, so emitting is safe for a caller that cannot tell it is a retry.
   idempotencyKey String @unique
 
-  occurredAt DateTime @default(now())
+  occurredAt  DateTime @default(now())
   /// First instant of the UTC calendar month containing `occurredAt`. Stored rather than
   /// derived so the rollup key is an indexed column instead of an expression.
   periodStart DateTime
