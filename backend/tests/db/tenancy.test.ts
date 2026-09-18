@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import { Platform, Role } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { seedAll } from '../../prisma/seed/index';
@@ -292,6 +292,58 @@ describe.skipIf(!hasTestDatabase)('tenancy isolation', () => {
       await expect(
         requireWorkspaceAccess(SHARED_ADMIN_ID, '00000000-0000-4000-8000-000000000000'),
       ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+  describe('scoping composes with encryption at rest', () => {
+    // The two guarantees are proved separately elsewhere: encryption.test.ts writes
+    // through the unscoped client, and everything above this scopes without writing a
+    // secret. Nothing crossed the seam between them, and that seam is one `as unknown as`
+    // away from being defeated — `tenancy.ts` already contains such a cast where a
+    // `findUnique` is re-dispatched as a `findFirst`. If a refactor broke encryption
+    // there, every test in both files would stay green.
+    //
+    // `withTenantScope` accepting only `Db` — the encryption-extended client — is what
+    // makes the composition safe by typing rather than by convention. This asserts the
+    // consequence, from the scoped path, against the raw column.
+    const PLAINTEXT_TOKEN = 'scoped-write-plaintext-do-not-store-like-this';
+    const EXTERNAL_ID = 'w3-scoped-encryption-fixture';
+    let accountId: string;
+
+    beforeAll(async () => {
+      const { db: scoped } = await requireBrandAccess(RISE.ownerId, RISE.brandId);
+
+      const account = await scoped.socialAccount.create({
+        data: {
+          brandId: RISE.brandId,
+          platform: Platform.LINKEDIN,
+          externalId: EXTERNAL_ID,
+          accessToken: PLAINTEXT_TOKEN,
+          scopes: [],
+        },
+      });
+
+      accountId = account.id;
+    });
+
+    afterAll(async () => {
+      await db.socialAccount.deleteMany({ where: { id: accountId } });
+    });
+
+    it('stores ciphertext when the write goes through a scoped client', async () => {
+      const [row] = await db.$queryRaw<{ accessToken: string }[]>`
+        SELECT "accessToken" FROM social_accounts WHERE id = ${accountId}
+      `;
+
+      expect(row?.accessToken).toBeTruthy();
+      expect(row?.accessToken).not.toContain(PLAINTEXT_TOKEN);
+      expect(row?.accessToken).toMatch(/^v1\.k1\./);
+    });
+
+    it('still decrypts transparently when read back through the scope', async () => {
+      const { db: scoped } = await requireBrandAccess(RISE.ownerId, RISE.brandId);
+      const account = await scoped.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
+
+      expect(account.accessToken).toBe(PLAINTEXT_TOKEN);
     });
   });
 });
