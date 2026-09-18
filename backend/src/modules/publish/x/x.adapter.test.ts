@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TwitterApi } from 'twitter-api-v2';
 import type { ResolvedCredential } from '../adapter.types';
 import { XAdapter, type TwitterClientFactory } from './x.adapter';
+import { measureCaption } from '../../template/platform-spec';
 
 /**
  * The X adapter, against a fake client.
@@ -170,6 +171,37 @@ describe('XAdapter', () => {
       // that can never succeed until the user edits it.
       expect(error.errorClass).toBe('VALIDATION');
       expect(tweet).not.toHaveBeenCalled();
+    });
+
+    it('counts a caption X’s way, so it accepts what the composer said would fit', async () => {
+      // The composer and the publisher have to agree, or the product schedules posts it
+      // then refuses to send. They disagreed: this gate used a raw `.length` while the
+      // composer used X's weighting, where a URL bills a flat 23 however long it is.
+      //
+      // This caption is deliberately in the gap — over 280 raw characters, under 280
+      // weighted — which is the shape of any ordinary post containing a tracked link.
+      const url =
+        'https://riseandshore.example.com/menu/spring-specials?utm_source=x&utm_medium=social&utm_campaign=launch';
+      const caption = 'Spring specials are live at Rise + Shore. '.repeat(5) + url;
+
+      // The premise of the test, asserted rather than assumed: if a future edit made this
+      // caption short enough to pass a naive length check, the test would still go green
+      // while proving nothing.
+      expect(caption.length).toBeGreaterThan(280);
+      expect(measureCaption('X', caption).used).toBeLessThanOrEqual(280);
+
+      const { factory } = fakeClient({
+        v2: { tweet: async () => ({ data: { id: '778', text: caption } }) },
+      });
+
+      const result = await new XAdapter(factory).publish(credential, {
+        account,
+        caption,
+        media: [],
+        idempotencyKey: 'publish:target-2',
+      });
+
+      expect(result.externalPostId).toBe('778');
     });
 
     it('classifies a read-only app as CREDENTIAL, not AUTH', async () => {

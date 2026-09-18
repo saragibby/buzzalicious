@@ -17,6 +17,7 @@ import type {
   TokenSet,
 } from '../adapter.types';
 import { classifyPlatformError, isPlatformError, type PlatformError } from '../publish.errors';
+import { measureCaption } from '../../template/platform-spec';
 
 /**
  * Translate whatever `twitter-api-v2` threw into the shape the taxonomy classifies.
@@ -348,7 +349,16 @@ export class XAdapter implements PlatformAdapter {
   }
 
   async publish(cred: ResolvedCredential, input: PublishInput): Promise<PublishResult> {
-    if (input.caption.length > X_SPEC.captionMaxLength) {
+    // Counted X's way — URLs bill a flat 23 via t.co, emoji and CJK bill 2 — using the
+    // same `measureCaption` the composer's counter and draft-save validation use.
+    //
+    // A raw `.length` here disagreed with the composer in the direction that hurts: a
+    // 314-character caption whose URL is long weighs 233 to X, so the composer showed
+    // "233/280, fits" and let the user schedule it, and this gate then rejected the
+    // identical text at publish time. Any caption containing a link was a candidate,
+    // which is most of them — link clicks are the metric this product exists to move.
+    const measured = measureCaption('X', input.caption);
+    if (measured.over) {
       // Caught before the network on purpose: X returns a 403 for an over-length tweet,
       // and a 403 would otherwise be classified as a credential problem and send the
       // client to re-check their app permissions for what is really a content bug.

@@ -99,6 +99,36 @@ PR 2 (Meta family, health sweeps, Settings → Connections):
       publish path exist and are tested; the periodic sweep that calls them does not yet
 - [ ] Revoking a credential halts its jobs and marks dependent accounts
 - [ ] Meta adapters are complete and tested against faked responses
+- [ ] Every adapter gates captions through the **shared** `measureCaption` from
+      `modules/template/platform-spec`, never a raw `.length`
+
+### Caption counting has one source of truth, and it is not the adapter
+
+The X adapter shipped in PR 1 gated on `input.caption.length` while the composer counted
+X's way, where a URL bills a flat 23 via t.co however long it really is. A 314-character
+caption carrying a tracked link weighs 233 to X: the composer showed "233/280, fits", the
+user scheduled it, and the publisher then rejected the identical text at publish time.
+That is the composer-previews-what-pre-flight-rejects failure, and it fired on the most
+ordinary post this product makes — one with a link in it.
+
+Fixed on `main` for X, with a regression test pinned in the gap between the two counts.
+**The other three platforms each count differently and will reproduce it verbatim if
+reimplemented locally:** Threads charges UTF-8 **bytes**, Instagram counts **code points**
+(an emoji is one, not two), Facebook is undocumented. Import `measureCaption`; do not
+write a comparison against `captionMaxLength` in an adapter.
+
+Two related gaps, both open:
+
+- **Pre-flight does not check caption length at all.** The only gate is inside `publish`,
+  so an over-length caption fails when the job runs rather than when the user schedules
+  it. Move the check into pre-flight so it is caught at schedule time, and keep the
+  adapter check as the backstop.
+- **`PlatformSpec` still exists twice** — as a type in `modules/publish/adapter.types.ts`
+  with per-adapter `specs` values, and as `PLATFORM_SPECS` in
+  `modules/template/platform-spec.ts`. The X values agree today (280, same four ratios,
+  `mediaRequired: false`, `linkBehavior: 'inline'`); I diffed them. Collapse onto the
+  `modules/template` one as the single source while adding the Meta adapters, rather than
+  letting three more pairs drift.
 
 ## Notes
 
