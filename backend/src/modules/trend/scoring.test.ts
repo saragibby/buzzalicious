@@ -9,6 +9,7 @@ import {
   scoreTrend,
   type ScoringInput,
 } from './scoring';
+import { engagementOf, volumeOf } from './trend.schemas';
 
 const NOW = new Date('2026-03-01T12:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -18,43 +19,34 @@ function daysAgo(days: number): Date {
 }
 
 /** `[daysAgo, volume]` pairs, oldest first, the way the seed expresses a history. */
-function history(points: [number, number][], key = 'volume'): ScoringInput {
+function history(points: [number, number][]): ScoringInput {
   return {
     firstSeenAt: daysAgo(points[0]![0]),
     signals: points.map(([d, volume]) => ({
       observedAt: daysAgo(d),
-      metrics: { [key]: volume },
+      metrics: { volume },
     })),
   };
 }
 
-describe('scoreTrend', () => {
-  it('reads the volume W2\u2019s seed writes, not just the name in the schema', () => {
-    // The seed writes `mentions`; TrendSignalMetricsSchema names the field `volume`. If
-    // the scorer only understood one of them, every seeded trend would score zero and the
-    // mismatch would look like a scoring bug rather than a vocabulary one.
-    const asVolume = scoreTrend(
-      history([
-        [10, 1000],
-        [5, 4000],
-      ]),
-      NOW,
-    );
-    const asMentions = scoreTrend(
-      history(
-        [
-          [10, 1000],
-          [5, 4000],
-        ],
-        'mentions',
-      ),
-      NOW,
-    );
+describe('metric readers', () => {
+  it('returns null, not 0, when an observation carries no volume', () => {
+    // `metrics` is a contract column: TrendSignalMetricsSchema names the field, and a
+    // collector with its own vocabulary normalises on the way in. So an absent `volume`
+    // means "not observed", and the one thing that must never happen is reading it as a
+    // real zero — that fabricates a cliff in the velocity series.
+    expect(volumeOf({ engagement: 4200 })).toBeNull();
+    expect(volumeOf({})).toBeNull();
+    expect(volumeOf(null)).toBeNull();
+    expect(engagementOf({ volume: 1000 })).toBeNull();
 
-    expect(asMentions.velocity).toBeCloseTo(asVolume.velocity, 10);
-    expect(asMentions.velocity).toBeGreaterThan(0);
+    expect(volumeOf({ volume: 0 })).toBe(0);
+    expect(volumeOf({ volume: 1000 })).toBe(1000);
+    expect(engagementOf({ engagement: 4200 })).toBe(4200);
   });
+});
 
+describe('scoreTrend', () => {
   it('ignores an observation with no volume rather than reading it as zero', () => {
     // A collector reporting engagement but not volume has not observed zero posts.
     // Treating it as zero invents a cliff and flips a rising trend to DECLINING.

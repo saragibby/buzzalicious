@@ -251,9 +251,12 @@ Where the build departed from the plan above, and why:
 - **Rescoring has no schedule.** pg-boss is deferred to W6, so recompute is triggered from
   the curation UI. It should move to a cron when the job system lands.
 
-- **`TrendSignal` metrics vocabulary differs between the seed and the schema.** The seed
-  writes `mentions` / `engagements`; `TrendSignalMetricsSchema` names them `volume` /
-  `engagement`. The schema is `.passthrough()`, so both validate and the mismatch is
-  silent. `volumeOf()` / `engagementOf()` read either spelling and return `null` — never
-  `0` — when a metric is absent, so a missing metric cannot be mistaken for a flat trend.
-  The two should converge on one vocabulary.
+- **`TrendSignal.metrics` is a contract column, not a verbatim payload.** `schema.prisma`
+  points it at `TrendSignalMetricsSchema`, which names `volume` and `engagement`, and the
+  seed now writes those names. Provenance is preserved by `Trend.raw`, which is the column
+  this document's "the raw payload must survive" requirement is about.
+
+  A collector arriving with its own vocabulary therefore **normalises at the collector
+  boundary** on the way into `metrics`, keeping its verbatim payload in `raw`. Readers know
+  one name. `volumeOf()` / `engagementOf()` return `null` — never `0` — when a metric is
+  absent, so a metric that was never observed cannot be mistaken for a flat trend.

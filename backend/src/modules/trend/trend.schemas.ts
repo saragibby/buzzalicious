@@ -45,36 +45,30 @@ export type TrendSignalMetrics = z.infer<typeof TrendSignalMetricsSchema>;
 /**
  * Reads the comparable volume out of one observation.
  *
- * `TrendSignalMetricsSchema` names the field `volume`, but W2's seed writes `mentions` and
- * the collectors in docs/07 will each have their own vocabulary. Rather than normalize on
- * write — which would mean discarding whatever the source actually called it, and docs/07
- * is explicit that the raw payload must survive so scoring can be re-run — the scorer
- * accepts the known aliases on read.
+ * `TrendSignal.metrics` is a contract column, not a verbatim payload — `schema.prisma`
+ * points it at `TrendSignalMetricsSchema`, which names this field `volume`. Provenance
+ * lives in `Trend.raw`, which is where docs/07's "the raw payload must survive" applies.
+ * So a collector with its own vocabulary normalizes on the way into `metrics` and keeps
+ * its original payload in `raw`; this reader knows one name, and `metrics` keeps meaning
+ * one thing.
  *
  * Returns `null`, never 0, when an observation carries no volume at all. A collector that
  * reports engagement but not volume has not observed a volume of zero, and treating it as
  * one would invent a cliff in the velocity series.
  */
 export function volumeOf(metrics: unknown): number | null {
-  if (typeof metrics !== 'object' || metrics === null) return null;
-  const record = metrics as Record<string, unknown>;
-
-  for (const key of ['volume', 'mentions', 'postCount', 'posts'] as const) {
-    const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
-  }
-  return null;
+  return finiteNonNegative(metrics, 'volume');
 }
 
-/** Same aliasing problem, same treatment. `engagements` is what the seed writes. */
+/** Same contract, same treatment. See `volumeOf`. */
 export function engagementOf(metrics: unknown): number | null {
-  if (typeof metrics !== 'object' || metrics === null) return null;
-  const record = metrics as Record<string, unknown>;
+  return finiteNonNegative(metrics, 'engagement');
+}
 
-  for (const key of ['engagement', 'engagements'] as const) {
-    const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
-  }
+function finiteNonNegative(metrics: unknown, key: string): number | null {
+  if (typeof metrics !== 'object' || metrics === null) return null;
+  const value = (metrics as Record<string, unknown>)[key];
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
   return null;
 }
 
