@@ -149,12 +149,36 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
     mine = await makeTenant('Mine', {
       // Three posts on one template, all measured the same way, so the headline has an
       // eligible winner with a real sample behind it.
-      a1: { platform: 'X', templateKey: 'alpha', snapshots: [{ hours: 1, linkClicks: 10, likes: 4 }] },
-      a2: { platform: 'X', templateKey: 'alpha', snapshots: [{ hours: 1, linkClicks: 12, likes: 5 }] },
-      a3: { platform: 'X', templateKey: 'alpha', snapshots: [{ hours: 1, linkClicks: 14, likes: 6 }] },
-      b1: { platform: 'X', templateKey: 'beta', snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }] },
-      b2: { platform: 'X', templateKey: 'beta', snapshots: [{ hours: 1, linkClicks: 2, likes: 1 }] },
-      b3: { platform: 'X', templateKey: 'beta', snapshots: [{ hours: 1, linkClicks: 3, likes: 1 }] },
+      a1: {
+        platform: 'X',
+        templateKey: 'alpha',
+        snapshots: [{ hours: 1, linkClicks: 10, likes: 4 }],
+      },
+      a2: {
+        platform: 'X',
+        templateKey: 'alpha',
+        snapshots: [{ hours: 1, linkClicks: 12, likes: 5 }],
+      },
+      a3: {
+        platform: 'X',
+        templateKey: 'alpha',
+        snapshots: [{ hours: 1, linkClicks: 14, likes: 6 }],
+      },
+      b1: {
+        platform: 'X',
+        templateKey: 'beta',
+        snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }],
+      },
+      b2: {
+        platform: 'X',
+        templateKey: 'beta',
+        snapshots: [{ hours: 1, linkClicks: 2, likes: 1 }],
+      },
+      b3: {
+        platform: 'X',
+        templateKey: 'beta',
+        snapshots: [{ hours: 1, linkClicks: 3, likes: 1 }],
+      },
       // Cumulative totals across three polls: the latest must win, never the sum.
       series: {
         platform: 'FACEBOOK',
@@ -178,9 +202,21 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
       // A second gamma post measured the same way as the X posts. Gamma therefore holds
       // two targets scored on *different* component sets, which is what makes it
       // unrankable — see the mixed-measurement test.
-      g2: { platform: 'X', templateKey: 'gamma', snapshots: [{ hours: 1, linkClicks: 8, likes: 2 }] },
-      g3: { platform: 'X', templateKey: 'gamma', snapshots: [{ hours: 1, linkClicks: 8, likes: 2 }] },
-      g4: { platform: 'X', templateKey: 'gamma', snapshots: [{ hours: 1, linkClicks: 8, likes: 2 }] },
+      g2: {
+        platform: 'X',
+        templateKey: 'gamma',
+        snapshots: [{ hours: 1, linkClicks: 8, likes: 2 }],
+      },
+      g3: {
+        platform: 'X',
+        templateKey: 'gamma',
+        snapshots: [{ hours: 1, linkClicks: 8, likes: 2 }],
+      },
+      g4: {
+        platform: 'X',
+        templateKey: 'gamma',
+        snapshots: [{ hours: 1, linkClicks: 8, likes: 2 }],
+      },
     });
 
     theirs = await makeTenant('Theirs', {
@@ -199,19 +235,47 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
     // One template, one platform, a sample well over the floor. Only the
     // "two groups or it is not a comparison" guard stands between this and a headline.
     solo = await makeTenant('Solo', {
-      s1: { platform: 'X', templateKey: 'solo', snapshots: [{ hours: 1, linkClicks: 5, likes: 1 }] },
-      s2: { platform: 'X', templateKey: 'solo', snapshots: [{ hours: 1, linkClicks: 6, likes: 1 }] },
-      s3: { platform: 'X', templateKey: 'solo', snapshots: [{ hours: 1, linkClicks: 7, likes: 1 }] },
-      s4: { platform: 'X', templateKey: 'solo', snapshots: [{ hours: 1, linkClicks: 8, likes: 1 }] },
+      s1: {
+        platform: 'X',
+        templateKey: 'solo',
+        snapshots: [{ hours: 1, linkClicks: 5, likes: 1 }],
+      },
+      s2: {
+        platform: 'X',
+        templateKey: 'solo',
+        snapshots: [{ hours: 1, linkClicks: 6, likes: 1 }],
+      },
+      s3: {
+        platform: 'X',
+        templateKey: 'solo',
+        snapshots: [{ hours: 1, linkClicks: 7, likes: 1 }],
+      },
+      s4: {
+        platform: 'X',
+        templateKey: 'solo',
+        snapshots: [{ hours: 1, linkClicks: 8, likes: 1 }],
+      },
     });
 
     // Two comparable templates, but the higher-scoring one rests on a single post. Only
     // the sample floor stops it being named, and it scores an order of magnitude above
     // the other so a floor-less ranking would certainly pick it.
     floor = await makeTenant('Floor', {
-      z1: { platform: 'X', templateKey: 'zeta', snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }] },
-      z2: { platform: 'X', templateKey: 'zeta', snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }] },
-      z3: { platform: 'X', templateKey: 'zeta', snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }] },
+      z1: {
+        platform: 'X',
+        templateKey: 'zeta',
+        snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }],
+      },
+      z2: {
+        platform: 'X',
+        templateKey: 'zeta',
+        snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }],
+      },
+      z3: {
+        platform: 'X',
+        templateKey: 'zeta',
+        snapshots: [{ hours: 1, linkClicks: 1, likes: 1 }],
+      },
       e1: {
         platform: 'X',
         templateKey: 'eta',
@@ -223,9 +287,21 @@ describe.skipIf(!hasTestDatabase)('insight read model', () => {
     // different components — clicks here, saves there. Both pass every other guard, so
     // only the winner-versus-runner-up comparability check refuses this one.
     mixed = await makeTenant('Mixed', {
-      d1: { platform: 'X', templateKey: 'delta', snapshots: [{ hours: 1, linkClicks: 9, likes: 1 }] },
-      d2: { platform: 'X', templateKey: 'delta', snapshots: [{ hours: 1, linkClicks: 9, likes: 1 }] },
-      d3: { platform: 'X', templateKey: 'delta', snapshots: [{ hours: 1, linkClicks: 9, likes: 1 }] },
+      d1: {
+        platform: 'X',
+        templateKey: 'delta',
+        snapshots: [{ hours: 1, linkClicks: 9, likes: 1 }],
+      },
+      d2: {
+        platform: 'X',
+        templateKey: 'delta',
+        snapshots: [{ hours: 1, linkClicks: 9, likes: 1 }],
+      },
+      d3: {
+        platform: 'X',
+        templateKey: 'delta',
+        snapshots: [{ hours: 1, linkClicks: 9, likes: 1 }],
+      },
       p1: {
         platform: 'INSTAGRAM',
         templateKey: 'epsilon',

@@ -63,9 +63,7 @@ describe('syntheticLink', () => {
 describe('substituteLink', () => {
   it.each(['X', 'FACEBOOK', 'THREADS'] as const)('injects the link for %s', (platform) => {
     const url = realLink();
-    expect(substituteLink(platform, `Read more: ${LINK_MARKER}`, url)).toBe(
-      `Read more: ${url}`,
-    );
+    expect(substituteLink(platform, `Read more: ${LINK_MARKER}`, url)).toBe(`Read more: ${url}`);
   });
 
   it('replaces every occurrence, not only the first', () => {
@@ -119,7 +117,9 @@ describe('measureWithLink', () => {
 
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const published = substituteLink(platform, caption, realLink());
-      expect(measureWithLink(platform, caption).used).toBe(measureCaption(platform, published).used);
+      expect(measureWithLink(platform, caption).used).toBe(
+        measureCaption(platform, published).used,
+      );
     }
   });
 

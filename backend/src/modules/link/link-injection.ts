@@ -77,11 +77,7 @@ export function syntheticLink(): string {
  * nothing. The surrounding whitespace is tidied so removal does not leave a double space
  * or a trailing gap.
  */
-export function substituteLink(
-  platform: SupportedPlatform,
-  caption: string,
-  url: string,
-): string {
+export function substituteLink(platform: SupportedPlatform, caption: string, url: string): string {
   // Two different reasons to end up with no URL, one correct behaviour. A `bio-only`
   // platform will not linkify a caption URL, and an empty `url` means the caller had no
   // destination to offer. Either way the marker comes out, and the space it was sitting

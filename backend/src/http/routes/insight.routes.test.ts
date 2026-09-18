@@ -48,11 +48,7 @@ describe('insight routes', () => {
     bare.use('/insights', createInsightRouter());
     bare.use(errorHandler);
 
-    const BARE_PATHS = [
-      '/insights',
-      '/insights/clicks',
-      '/insights/targets/some-target/timeline',
-    ];
+    const BARE_PATHS = ['/insights', '/insights/clicks', '/insights/targets/some-target/timeline'];
 
     it('rejects every surface without a session', async () => {
       for (const path of BARE_PATHS) {

@@ -237,7 +237,10 @@ describe.skipIf(!hasTestDatabase)('link injection at publish', () => {
       await publishTarget(db, { targetId: xTarget, actor: 'test', registry });
       await publishTarget(db, { targetId: fbTarget, actor: 'test', registry });
 
-      const links = await db.shortLink.findMany({ where: { postId }, orderBy: { platform: 'asc' } });
+      const links = await db.shortLink.findMany({
+        where: { postId },
+        orderBy: { platform: 'asc' },
+      });
       expect(links.map((l) => l.platform)).toEqual(['FACEBOOK', 'X']);
 
       const slugs = new Set(links.map((l) => l.slug));

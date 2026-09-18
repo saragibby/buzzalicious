@@ -6,12 +6,7 @@ import { CredentialUnavailableError, resolveCredential } from '../publish/creden
 import { PlatformMetaSchema } from '../publish/credential.schemas';
 import { isPlatformError } from '../publish/publish.errors';
 import { clicksAreMeasurable } from '../link/rollup.service';
-import {
-  CHECKPOINT_HOURS,
-  checkpointAt,
-  dueCheckpoints,
-  hoursSincePublish,
-} from './poll.schedule';
+import { CHECKPOINT_HOURS, checkpointAt, dueCheckpoints, hoursSincePublish } from './poll.schedule';
 
 /**
  * Reading metrics back from the platforms, one immutable snapshot at a time.

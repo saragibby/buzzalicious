@@ -106,12 +106,15 @@ describe.skipIf(!hasTestDatabase)('click rollups', () => {
     // Shape 1: a post + platform link on a platform that carries caption links.
     // Shape 2: the same post on Instagram, which cannot — must read as unmeasurable.
     // Shape 3: a brand-level link with a null post AND null platform.
-    const shapes: Array<{ key: string; postId: string | null; platform: 'X' | 'INSTAGRAM' | null }> =
-      [
-        { key: 'x', postId: post.id, platform: 'X' },
-        { key: 'instagram', postId: post.id, platform: 'INSTAGRAM' },
-        { key: 'bare', postId: null, platform: null },
-      ];
+    const shapes: Array<{
+      key: string;
+      postId: string | null;
+      platform: 'X' | 'INSTAGRAM' | null;
+    }> = [
+      { key: 'x', postId: post.id, platform: 'X' },
+      { key: 'instagram', postId: post.id, platform: 'INSTAGRAM' },
+      { key: 'bare', postId: null, platform: null },
+    ];
 
     for (const shape of shapes) {
       const slug = `${name.slice(0, 2)}${randomUUID().replace(/-/g, '').slice(0, 5)}`;
@@ -138,7 +141,14 @@ describe.skipIf(!hasTestDatabase)('click rollups', () => {
       });
     }
 
-    return { workspaceId, brandId, postId: post.id, templateId: template.id, trendId: trend.id, slugs };
+    return {
+      workspaceId,
+      brandId,
+      postId: post.id,
+      templateId: template.id,
+      trendId: trend.id,
+      slugs,
+    };
   }
 
   let mine: Fixture;

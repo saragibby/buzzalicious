@@ -1,11 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Platform } from '../../lib/brandApi';
-import {
-  countLinks,
-  measureCaptionWithLink,
-  type LinkPreview,
-} from '../../lib/captionCount';
+import { countLinks, measureCaptionWithLink, type LinkPreview } from '../../lib/captionCount';
 import {
   LINK_MARKER,
   fetchPlatformSpecs,

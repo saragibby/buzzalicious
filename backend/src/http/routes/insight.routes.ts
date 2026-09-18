@@ -4,7 +4,11 @@ import { ValidationError } from '../../platform/errors';
 import { requireAuth } from '../middleware/require-auth';
 import { requireBrandAccess } from '../../modules/identity/authorization';
 import { insightSummary, metricTimeline } from '../../modules/insight/insight.service';
-import { clicksByDay, clicksByShortLink, type ClickWindow } from '../../modules/link/rollup.service';
+import {
+  clicksByDay,
+  clicksByShortLink,
+  type ClickWindow,
+} from '../../modules/link/rollup.service';
 
 /**
  * Read-only insight surfaces, mounted under a brand.

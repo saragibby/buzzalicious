@@ -233,7 +233,9 @@ function meanOf(scores: OutcomeScore[]): { mean: number | null; shared: OutcomeC
   // A mean over scores built from different components averages incomparable numbers. The
   // mean is still the best summary available, so it is returned — but `sharedComponents`
   // goes out empty, which is how the caller learns not to rank on it.
-  const shared = scored.every((entry) => comparable(entry, scored[0]!)) ? scored[0]!.components : [];
+  const shared = scored.every((entry) => comparable(entry, scored[0]!))
+    ? scored[0]!.components
+    : [];
 
   return { mean, shared };
 }
@@ -357,11 +359,7 @@ export async function insightSummary(db: ScopedDb, window: ClickWindow): Promise
     clicksByShortLink(db, window),
   ]);
 
-  const byPlatform = groupOutcomes(
-    targets,
-    (row) => row.platform,
-    rollUpByPlatform(linkRows),
-  );
+  const byPlatform = groupOutcomes(targets, (row) => row.platform, rollUpByPlatform(linkRows));
   const byTemplate = groupOutcomes(
     targets,
     (row) => row.templateId ?? undefined,

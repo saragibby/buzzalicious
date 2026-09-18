@@ -262,8 +262,8 @@ export function Insights() {
           </p>
         ) : (
           <p className="insight-empty">
-            Not enough comparable posts yet to say what is working. Keep publishing — this fills
-            in once a few posts have been measured the same way.
+            Not enough comparable posts yet to say what is working. Keep publishing — this fills in
+            once a few posts have been measured the same way.
           </p>
         )}
       </section>
@@ -295,9 +295,7 @@ export function Insights() {
                 target={target}
                 isOpen={openTargetId === target.postTargetId}
                 onToggle={() =>
-                  setOpenTargetId(
-                    openTargetId === target.postTargetId ? null : target.postTargetId,
-                  )
+                  setOpenTargetId(openTargetId === target.postTargetId ? null : target.postTargetId)
                 }
               />
             ))}

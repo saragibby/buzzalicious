@@ -230,27 +230,28 @@ describe.skipIf(!hasTestDatabase)('metric snapshots', () => {
       'videoViews',
     ] as const;
 
-    it.each(NULLABLE)('stores every other metric as null when only %s is reported', async (
-      reported,
-    ) => {
-      const { targetId } = await makeTarget();
-      const { registry } = registryReturning({ [reported]: 3 });
+    it.each(NULLABLE)(
+      'stores every other metric as null when only %s is reported',
+      async (reported) => {
+        const { targetId } = await makeTarget();
+        const { registry } = registryReturning({ [reported]: 3 });
 
-      await captureSnapshot(
-        db,
-        targetId,
-        { hour: 1, capturedAt: checkpointAt(PUBLISHED, 1) },
-        { registry },
-      );
+        await captureSnapshot(
+          db,
+          targetId,
+          { hour: 1, capturedAt: checkpointAt(PUBLISHED, 1) },
+          { registry },
+        );
 
-      const row = await db.postMetric.findFirst({ where: { postTargetId: targetId } });
-      expect(row![reported]).toBe(3);
-      for (const field of NULLABLE) {
-        if (field === reported) continue;
-        expect(row![field], `${field} should be null, not fabricated`).toBeNull();
-        expect(row![field]).not.toBe(0);
-      }
-    });
+        const row = await db.postMetric.findFirst({ where: { postTargetId: targetId } });
+        expect(row![reported]).toBe(3);
+        for (const field of NULLABLE) {
+          if (field === reported) continue;
+          expect(row![field], `${field} should be null, not fabricated`).toBeNull();
+          expect(row![field]).not.toBe(0);
+        }
+      },
+    );
 
     it('records a genuine zero as zero, because earning nothing is information', async () => {
       const { targetId } = await makeTarget();
