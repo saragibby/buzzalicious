@@ -108,14 +108,42 @@ flowchart TD
 
 T0 and T1 are a single PR. T2 and T6 can run in parallel with T3.
 
+## What actually happened (M1)
+
+T0, T1, T2, T4 and T6 landed together as M1. T3 and T5 did not, and that is deliberate:
+
+- **T3 (schema + `0001_init` + seed)** belongs to W2, which owns
+  `backend/prisma/schema.prisma` exclusively. M1 only *emptied* `prisma/migrations/`.
+  The consequence is that `prisma migrate deploy` is currently inert — it runs and
+  applies nothing — and local development uses `prisma db push`. The Procfile `release`
+  process type is wired anyway so that W2's first migration deploys without also
+  changing the release pipeline.
+- **T5 (port the X adapter onto `PlatformAdapter`)** needs a `PlatformAdapter`
+  interface and a resolved-credential model, neither of which exists before W6. The
+  prototype's `twitter.service.ts` was moved unreferenced to
+  `backend/src/modules/publish/x/` with a header stating what must change; the wire-level
+  knowledge is in `docs/reference/x-oauth1a.md`.
+
+Two further deviations worth recording:
+
+- **pg-boss was deferred to W6.** `jobs/` and the `worker` process type are scaffolded
+  and the worker boots, idles and shuts down cleanly, but no queue is registered. This
+  proves the process type, config and database wiring before any real job depends on
+  them, without committing to a queue API that has no jobs to run.
+- **`schema.prisma` still declares `canva*`, `twitter*` and `linkedin*` columns.** No
+  code reads them. Removing them is W2's job, since it rewrites the file wholesale.
+
 ## Definition of done for the teardown
 
-- [ ] `backend/src/` contains no reference to Canva, `setInterval` scheduling, or
-      free-prompt AI generation
-- [ ] `frontend/src/components/` is empty of the four old components
-- [ ] `prisma/migrations/` contains exactly one migration
-- [ ] `npm run build`, `npm run lint`, `npm run type-check`, and `npm test` all pass at
+- [x] `backend/src/` contains no reference to Canva, `setInterval` scheduling, or
+      free-prompt AI generation — the sole surviving `setInterval` is a keep-alive in
+      `worker.ts` for a process that listens on no socket
+- [x] `frontend/src/components/` is empty of the four old components
+- [ ] `prisma/migrations/` contains exactly one migration — **W2.** M1 emptied the
+      directory; `0001_init` is W2's to author
+- [x] `npm run build`, `npm run lint`, `npm run type-check`, and `npm test` all pass at
       the repo root
-- [ ] The app boots, a user can sign in with Google, and a workspace + brand are created
-- [ ] `docs/reference/` captures the harvested integration knowledge
-- [ ] Root `README.md` describes the new product and setup accurately
+- [ ] The app boots, a user can sign in with Google, and a workspace + brand are
+      created — boot and Google sign-in work; workspace and brand are W2/W3 models
+- [x] `docs/reference/` captures the harvested integration knowledge
+- [x] Root `README.md` describes the new product and setup accurately

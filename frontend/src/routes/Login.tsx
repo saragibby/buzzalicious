@@ -16,7 +16,11 @@ export function Login() {
   const from = (location.state as { from?: string } | null)?.from ?? '/';
 
   if (isPending) {
-    return <div className="app-loading" role="status" aria-live="polite">Loading…</div>;
+    return (
+      <div className="app-loading" role="status" aria-live="polite">
+        Loading…
+      </div>
+    );
   }
 
   if (user) {

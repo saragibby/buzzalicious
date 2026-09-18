@@ -1,269 +1,140 @@
-# Buzzalicious 🐝
+# Buzzalicious
 
-Full-stack TypeScript application with React frontend and Express backend.
+A social content platform for a small agency that runs accounts on behalf of its clients.
+It turns a brand's identity and what is actually happening in its niche into posts that
+are ready to publish: reusable templates rendered to images, trend signals worth reacting
+to, AI drafting constrained by the brand's own voice, scheduling, and publishing to the
+client's own platform accounts.
 
-## Project Structure
+> **Status: reset in progress.** The repository is being rebuilt from a prototype on a
+> clean foundation. See [ADR-0001](docs/adr/0001-clean-foundation-reset.md) for why, and
+> [`docs/`](docs/README.md) for the plan. Milestone M1 (foundation and teardown) has
+> landed: the platform layer, module scaffold, tooling and tests exist; the domain models
+> and product features do not yet.
 
-```
-buzzalicious/
-├── frontend/          # React + TypeScript + Vite
-├── backend/           # Node.js + Express + TypeScript
-├── package.json       # Root package (workspace manager)
-└── README.md
-```
+## What is here today
 
-## Tech Stack
+- An Express API with Google sign-in, sessions that survive a restart, a validated
+  configuration boundary, structured logging, an error taxonomy, envelope encryption for
+  credentials, and a pluggable object-storage driver.
+- A Vite + React SPA shell: routing, an auth guard, a typed API client, placeholder routes.
+- An empty but named module for every part of the product, each with a README describing
+  what it will own.
+- Lint, format, type-check, test and build, all green, all enforced in CI.
 
-### Frontend
-- **React 18** - UI library
-- **TypeScript** - Type safety
-- **Vite** - Build tool and dev server
-- **ESLint** - Code linting
+## Getting started
 
-### Backend
-- **Node.js** - Runtime
-- **Express** - Web framework
-- **TypeScript** - Type safety
-- **Nodemon** - Auto-restart during development
-- **Prisma** - Database ORM
-- **PostgreSQL** - Database
-- **OpenAI SDK** - AI text and image generation
-- **Google Gemini** - AI text generation
+Requires Node 20+ and Postgres 14+.
 
-## Getting Started
-
-### Prerequisites
-- Node.js >= 18.0.0
-- npm >= 9.0.0
-- PostgreSQL 14+ (installed and running)
-- Google Cloud Console account (for OAuth)
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd buzzalicious
-```
-
-2. Install dependencies for all workspaces:
 ```bash
 npm install
-```
 
-3. **Set up Google OAuth:**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select existing one
-   - Enable Google+ API
-   - Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID"
-   - Application type: Web application
-   - Authorized redirect URIs:
-     - `http://localhost:3001/auth/google/callback` (development)
-     - `https://your-app.herokuapp.com/auth/google/callback` (production)
-   - Save the Client ID and Client Secret
-
-4. Set up PostgreSQL database:
-```bash
-# Create a PostgreSQL database named 'buzzalicious'
-# Using psql:
-psql -U postgres
-CREATE DATABASE buzzalicious;
-\q
-
-# Or using createdb:
-createdb buzzalicious
-```
-
-5. Set up environment variables:
-```bash
-# Backend
 cp backend/.env.example backend/.env
-
-# Edit backend/.env and update with your values:
-# - DATABASE_URL with your PostgreSQL credentials
-# - GOOGLE_CLIENT_ID from Google Cloud Console
-# - GOOGLE_CLIENT_SECRET from Google Cloud Console
-# - SESSION_SECRET (generate a random string)
-
-# Frontend
 cp frontend/.env.example frontend/.env
-```
 
-6. Run database migrations:
-```bash
-cd backend
-npm run prisma:migrate
-# Follow the prompts to name your migration (e.g., "init")
-```
+# Fill in backend/.env. Two values need generating:
+openssl rand -base64 32   # SESSION_SECRET
+openssl rand -base64 32   # ENCRYPTION_KEY
 
-7. (Optional) Seed the database with sample data:
-```bash
-npm run db:seed
-```
+createdb buzzalicious
+npm run db:push
 
-### Development
-
-Run both frontend and backend concurrently:
-```bash
 npm run dev
 ```
 
-Or run them separately:
-```bash
-# Backend only (runs on http://localhost:3001)
-npm run dev:backend
+The API is on <http://127.0.0.1:3001> and the SPA on <http://127.0.0.1:5173>.
 
-# Frontend only (runs on http://localhost:3000)
-npm run dev:frontend
+Use `127.0.0.1`, not `localhost`. They are different cookie origins and different strings
+for OAuth redirect matching; mixing them gives you a login that appears to work and a
+session that is not there. This and eight other hard-won integration details are in
+[`docs/reference/platform-quirks.md`](docs/reference/platform-quirks.md).
+
+`db:push` rather than `migrate` is deliberate for now — see *Migrations* below.
+
+### Google sign-in
+
+Create an OAuth client in Google Cloud Console and add
+`http://127.0.0.1:3001/auth/google/callback` as an authorised redirect URI. It must match
+`${APP_URL}/auth/google/callback` byte for byte.
+
+Leaving `ALLOWED_EMAILS` and `ALLOWED_DOMAINS` empty lets anyone with a Google account in.
+Set at least one before deploying anywhere reachable.
+
+## Commands
+
+| Command | Does |
+|---------|------|
+| `npm run dev` | API and SPA together, both watching |
+| `npm test` | The whole suite, once. Passes on a clean clone — see [docs/12-testing.md](docs/12-testing.md) |
+| `npm run test:watch` | The suite, watching |
+| `npm run lint` | ESLint. Enforces the layering rules, not just style |
+| `npm run format` | Prettier, writing |
+| `npm run type-check` | `tsc --noEmit` across both workspaces |
+| `npm run build` | Production build of both |
+| `npm run db:push` | Sync the schema to a development database |
+
+## Layout
+
+```
+backend/src/
+  platform/    config, logging, errors, crypto, storage, db — no product knowledge
+  http/        Express wiring: app factory, middleware, routers. Thin.
+  modules/     the product, one folder per capability
+  jobs/        background work, run by the worker process
+  index.ts     web entry point
+  worker.ts    worker entry point
+frontend/src/  the SPA
+docs/          architecture, decisions, workstream briefs, harvested reference
 ```
 
-### Building for Production
+Dependencies point inward: `http` may call `modules`, `modules` may call `platform`, and
+nothing may call `http`. ESLint enforces the last part, because a rule nobody checks is a
+preference.
 
-Build both projects:
-```bash
-npm run build
-```
+Each folder has a README explaining what belongs in it. Start with
+[`backend/src/platform/README.md`](backend/src/platform/README.md).
 
-Or build separately:
-```bash
-npm run build:backend
-npm run build:frontend
-```
+## Deployment
 
-### Running in Production
+Heroku, one app, two process types (`Procfile`):
 
-After building:
-```bash
-# Start backend
-cd backend
-npm start
+- `web` — the API, which also serves the built SPA
+- `worker` — background jobs, on its own dyno so scheduled work is not duplicated once per
+  web dyno
 
-# Serve frontend (use a static file server)
-cd frontend
-npx serve -s dist
-```
+Three consequences worth knowing before changing anything:
 
-## API Endpoints
+- **The filesystem is ephemeral.** Nothing written to disk survives a restart, so
+  `STORAGE_DRIVER=local` is rejected in production.
+- **TLS terminates at the router.** `trust proxy` must be set, or secure cookies never
+  reach the browser and sign-in silently fails with no error anywhere.
+- **Vite inlines `import.meta.env` at build time.** The SPA's API URL cannot come from a
+  runtime config var, so it falls back to `window.location.origin`.
 
-### Authentication
-- `GET /auth/google` - Initiate Google OAuth login
-- `GET /auth/google/callback` - Google OAuth callback
-- `GET /auth/logout` - Logout current user
-- `GET /auth/me` - Get current user info (protected)
+### Migrations
 
-### Backend API (http://localhost:3001)
-- `GET /api` - Welcome message
-- `GET /api/health` - Health check
-- `GET /api/users` - Get all users with their templates (protected)
-- `GET /api/templates` - Get all published templates (protected)
+`prisma/migrations/` is intentionally empty. The prototype's fourteen migrations described
+a data model that no longer exists, and replaying them onto a fresh database would produce
+tables the new code does not use.
 
-### Frontend (http://localhost:3000)
-- Frontend automatically proxies `/api` and `/auth` requests to the backend
+W2 owns [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma) and will author
+`0001_init` as the first migration of the new model. Until then `db:deploy` runs
+successfully with nothing to apply, and local development uses `db:push`.
 
-## Authentication Flow
+## Documentation
 
-1. User clicks "Sign in with Google" button
-2. Redirected to Google for authentication
-3. After successful authentication, redirected back to app
-4. User session is created and stored
-5. Protected routes now accessible
+[`docs/README.md`](docs/README.md) is the index and the reading order.
 
-## Deployment to Heroku
+- [`docs/01-architecture.md`](docs/01-architecture.md) — the target structure
+- [`docs/adr/`](docs/adr/) — decisions and their reasons
+- [`docs/tasks/`](docs/tasks/) — one brief per workstream
+- [`docs/reference/`](docs/reference/) — integration knowledge harvested from the
+  prototype before it was deleted. Written down because it is expensive to rediscover and
+  is in no vendor's documentation.
 
-### Initial Setup
-```bash
-# Create Heroku app
-heroku create your-app-name
+## Contributing
 
-# Add PostgreSQL
-heroku addons:create heroku-postgresql:essential-0
+Read [`AGENTS.md`](AGENTS.md) first. It is short, and it is where the working rules live.
 
-# Set environment variables
-heroku config:set NODE_ENV=production
-heroku config:set SESSION_SECRET=your-random-secret
-heroku config:set GOOGLE_CLIENT_ID=your-google-client-id
-heroku config:set GOOGLE_CLIENT_SECRET=your-google-client-secret
-heroku config:set GOOGLE_CALLBACK_URL=https://your-app.herokuapp.com/auth/google/callback
-```
-
-### Deploy
-```bash
-git push heroku main
-
-# Run migrations
-heroku run npm run prisma:migrate --workspace=backend
-```
-
-### Update Google OAuth
-Add Heroku callback URL to Google Cloud Console:
-- `https://your-app.herokuapp.com/auth/google/callback`
-
-## Database Management
-
-### Prisma Commands (run from `/backend` directory)
-
-**Create a new migration after schema changes:**
-```bash
-npm run prisma:migrate
-# This creates a new migration file and applies it to the database
-```
-
-**Generate Prisma Client (after schema changes):**
-```bash
-npm run prisma:generate
-```
-
-**Open Prisma Studio (database GUI):**
-```bash
-npm run prisma:studio
-# Opens at http://localhost:5555
-```
-
-**Push schema changes without creating migration (dev only):**
-```bash
-npm run db:push
-```
-
-**Seed the database:**
-```bash
-npm run db:seed
-```
-
-### Making Schema Changes
-
-1. Edit `backend/prisma/schema.prisma`
-2. Run migration: `npm run prisma:migrate`
-3. Name your migration (e.g., "add_user_profile")
-4. The migration is applied and Prisma Client is regenerated
-
-**Example - Adding a new field:**
-```prisma
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  bio       String?  // New field
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-```
-
-Then run: `npm run prisma:migrate`
-
-## Development Workflow
-
-1. The frontend development server runs on port 3000
-2. The backend API server runs on port 3001
-3. Vite's proxy configuration forwards `/api/*` requests from frontend to backend
-4. Both servers support hot-reloading during development
-
-## Project Features
-
-- ✅ Monorepo structure with npm workspaces
-- ✅ Full TypeScript support (frontend & backend)
-- ✅ Hot module reloading
-- ✅ ESLint configuration
-- ✅ Type checking scripts
-- ✅ Production build setup
-- ✅ CORS enabled for cross-origin requests
-- ✅ Environment variable support
+The four gates — `lint`, `type-check`, `test`, `build` — must pass before anything merges.
+CI runs all four on every pull request.

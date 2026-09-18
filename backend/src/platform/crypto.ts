@@ -1,9 +1,4 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-  timingSafeEqual,
-} from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getConfig } from './config';
 
 /**

@@ -60,12 +60,18 @@ Rewrite to describe the new product, setup, and a pointer to `docs/`.
 
 ## Acceptance criteria
 
-- [ ] No reference to Canva, `setInterval` scheduling, or free-prompt AI generation remains
-- [ ] The four old frontend components are gone
-- [ ] `prisma/migrations/` is empty (W2 adds `0001_init`)
-- [ ] The app builds and boots; Google sign-in works
-- [ ] `docs/reference/` captures the harvested knowledge
-- [ ] Root `README.md` is accurate
+- [x] No reference to Canva, `setInterval` scheduling, or free-prompt AI generation
+      remains. Canva's service, routes, columns-in-use and frontend component are gone;
+      `docs/reference/canva.md` keeps the integration knowledge for the record. The one
+      surviving `setInterval` is a keep-alive in `worker.ts` holding the event loop open
+      for a process that listens on no socket — not scheduling.
+- [x] The four old frontend components are gone
+- [x] `prisma/migrations/` is empty (W2 adds `0001_init`) — only `migration_lock.toml`
+      remains, which Prisma requires
+- [x] The app builds and boots; Google sign-in works
+- [x] `docs/reference/` captures the harvested knowledge — six pages, written and
+      committed **before** the deletions in the same commit
+- [x] Root `README.md` is accurate
 
 ## Notes
 

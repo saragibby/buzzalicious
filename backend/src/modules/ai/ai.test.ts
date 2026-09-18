@@ -93,8 +93,8 @@ describe('parseModelJson', () => {
   });
 
   it('rejects a wrong field type rather than coercing it', () => {
-    expect(() =>
-      parseModelJson('{"caption":123,"hashtags":[]}', schema, 'Caption'),
-    ).toThrow(/caption/);
+    expect(() => parseModelJson('{"caption":123,"hashtags":[]}', schema, 'Caption')).toThrow(
+      /caption/,
+    );
   });
 });

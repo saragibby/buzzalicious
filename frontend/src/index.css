@@ -21,7 +21,14 @@
   --text-muted: #5b636d;
   --accent: #b8005c;
 
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Helvetica,
+    Arial,
+    sans-serif;
   line-height: 1.5;
   color: var(--text);
   background-color: var(--surface);

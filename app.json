@@ -1,0 +1,36 @@
+{
+  "name": "Buzzalicious",
+  "description": "Template- and trend-driven social content platform.",
+  "repository": "https://github.com/saragibby/buzzalicious",
+  "stack": "heroku-24",
+  "buildpacks": [{ "url": "heroku/nodejs" }],
+  "addons": ["heroku-postgresql:essential-0"],
+  "env": {
+    "APP_URL": {
+      "description": "Absolute base URL of the deployed API, no trailing slash. The Google OAuth callback is derived from it, and redirect URIs must match byte for byte.",
+      "required": true
+    },
+    "WEB_URL": {
+      "description": "Absolute base URL the SPA is served from. Same as APP_URL for the single-deployable topology.",
+      "required": true
+    },
+    "SESSION_SECRET": {
+      "description": "Signs session cookies. At least 32 characters.",
+      "generator": "secret"
+    },
+    "ENCRYPTION_KEY": {
+      "description": "32 random bytes, base64. Encrypts stored credentials. Losing it means every stored OAuth token becomes unreadable.",
+      "required": true
+    },
+    "GOOGLE_CLIENT_ID": { "description": "Google OAuth client ID.", "required": true },
+    "GOOGLE_CLIENT_SECRET": { "description": "Google OAuth client secret.", "required": true },
+    "STORAGE_DRIVER": {
+      "description": "Must be r2 in production — the dyno filesystem is ephemeral.",
+      "value": "r2"
+    }
+  },
+  "formation": {
+    "web": { "quantity": 1, "size": "basic" },
+    "worker": { "quantity": 1, "size": "basic" }
+  }
+}

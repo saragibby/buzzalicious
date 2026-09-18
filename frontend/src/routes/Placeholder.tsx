@@ -64,9 +64,5 @@ export const Settings = () => (
 );
 
 export const NotFound = () => (
-  <Placeholder
-    title="Not found"
-    workstream="—"
-    description="That page does not exist."
-  />
+  <Placeholder title="Not found" workstream="—" description="That page does not exist." />
 );

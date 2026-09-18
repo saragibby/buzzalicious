@@ -43,23 +43,31 @@ export class TwitterService {
   /**
    * Post a tweet with media (images)
    */
-  async postTweetWithMedia(text: string, mediaUrls: string[]): Promise<{ id: string; text: string }> {
+  async postTweetWithMedia(
+    text: string,
+    mediaUrls: string[],
+  ): Promise<{ id: string; text: string }> {
     // Upload media first
     const mediaIds: string[] = [];
-    
+
     for (const url of mediaUrls) {
       // Fetch image from URL
       const response = await fetch(url);
       const buffer = Buffer.from(await response.arrayBuffer());
-      
+
       // Upload to Twitter
-      const mediaId = await this.client.v1.uploadMedia(buffer, { mimeType: response.headers.get('content-type') || 'image/jpeg' });
+      const mediaId = await this.client.v1.uploadMedia(buffer, {
+        mimeType: response.headers.get('content-type') || 'image/jpeg',
+      });
       mediaIds.push(mediaId);
     }
 
     // Post tweet with media (max 4 images)
     const tweet = await this.client.v2.tweet(text, {
-      media: { media_ids: mediaIds.slice(0, 4) as [string] | [string, string] | [string, string, string] | [string, string, string, string] },
+      media: {
+        media_ids: mediaIds.slice(0, 4) as
+          [string] | [string, string] | [string, string, string] | [string, string, string, string],
+      },
     });
 
     return {
@@ -79,7 +87,9 @@ export class TwitterService {
   /**
    * Generate OAuth 1.0a authorization URL
    */
-  static async generateAuthUrl(callbackUrl: string): Promise<{ url: string; oauth_token: string; oauth_token_secret: string }> {
+  static async generateAuthUrl(
+    callbackUrl: string,
+  ): Promise<{ url: string; oauth_token: string; oauth_token_secret: string }> {
     // W6: the prototype wrapped this in a try/catch that logged the provider's error
     // detail to the console and rethrew unchanged. The replacement should raise an
     // ExternalServiceError carrying the cause, so the error handler logs the detail
@@ -95,7 +105,11 @@ export class TwitterService {
   /**
    * Complete OAuth flow and get access tokens
    */
-  static async getAccessToken(oauthToken: string, oauthVerifier: string, oauthTokenSecret: string): Promise<{
+  static async getAccessToken(
+    oauthToken: string,
+    oauthVerifier: string,
+    oauthTokenSecret: string,
+  ): Promise<{
     accessToken: string;
     accessSecret: string;
     userId: string;

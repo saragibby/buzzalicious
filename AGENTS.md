@@ -107,16 +107,25 @@ into another module's Prisma queries.
 npm run dev          # frontend + backend
 npm run build        # both workspaces
 npm run lint         # both workspaces
+npm run format       # Prettier, writing
 npm run type-check   # both workspaces
-npm test             # Vitest (added in W0)
+npm test             # Vitest, both workspaces
 ```
 
-> Note: `lint` currently fails — no ESLint config file exists. W0 fixes this.
+All four of `lint`, `type-check`, `test` and `build` must pass before anything merges. CI
+runs them on every pull request. `npm test` passes on a clean clone with no database and
+no credentials — see [`docs/12-testing.md`](./docs/12-testing.md).
 
 ## Current state
 
-Nothing from the plan is implemented yet. Phase 1 starts with W0 (foundation) and W1
-(teardown), which must merge before any other workstream begins.
+**M1 (W0 foundation + W1 teardown) has landed.** The prototype is gone, the platform layer
+(config, logging, errors, crypto, storage, db) exists, every module folder is scaffolded
+with a README describing what it owns, the frontend is a routing shell, and the tooling and
+test infrastructure are in place.
+
+Nothing else from the plan is implemented. W2 (schema) is next and owns
+`backend/prisma/schema.prisma` exclusively; `prisma/migrations/` is intentionally empty
+until it authors `0001_init`.
 
 See [`docs/04-phase-1-roadmap.md`](./docs/04-phase-1-roadmap.md) for the dependency graph
 and milestones, and [`docs/09-open-questions.md`](./docs/09-open-questions.md) for what's

@@ -2,7 +2,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LocalStorageDriver, assertValidKey, buildStorageKey, createStorageDriver } from './storage';
+import {
+  LocalStorageDriver,
+  assertValidKey,
+  buildStorageKey,
+  createStorageDriver,
+} from './storage';
 import { loadConfig } from './config';
 import { validEnv } from '../../tests/env';
 
@@ -105,9 +110,9 @@ describe('LocalStorageDriver', () => {
 
     it('rejects an expired URL', () => {
       const past = Math.floor(Date.now() / 1000) - 10;
-      expect(driver.verify('renders/a/post.png', past, driver.sign('renders/a/post.png', past))).toBe(
-        false,
-      );
+      expect(
+        driver.verify('renders/a/post.png', past, driver.sign('renders/a/post.png', past)),
+      ).toBe(false);
     });
 
     it('rejects a forged signature', () => {

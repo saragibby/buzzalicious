@@ -122,9 +122,7 @@ describe('Encryptor', () => {
   });
 
   it('rejects a key of the wrong length at construction', () => {
-    expect(() => new EnvKeyProvider('k1', Buffer.alloc(16).toString('base64'))).toThrow(
-      /32 bytes/,
-    );
+    expect(() => new EnvKeyProvider('k1', Buffer.alloc(16).toString('base64'))).toThrow(/32 bytes/);
   });
 
   it('recognises its own ciphertext', () => {

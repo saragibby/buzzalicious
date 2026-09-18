@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a PR makes the previous run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, type-check, test, build
+    runs-on: ubuntu-latest
+
+    # The M1 suite does not need Postgres — database tests opt in via
+    # TEST_DATABASE_URL and skip when it is unset. The service is here so that
+    # W2 onwards can add migration and repository tests without also having to
+    # work out CI. See docs/12-testing.md.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: buzzalicious_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Fixed fake values. Config is validated at boot, so the build and the
+      # tests need a complete environment. None of these are real, and none of
+      # them may ever be — CI must never hold a live credential.
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/buzzalicious_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/buzzalicious_test
+      APP_URL: http://127.0.0.1:3001
+      WEB_URL: http://127.0.0.1:5173
+      SESSION_SECRET: ci-session-secret-that-is-long-enough-ok
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-google-client-secret
+      ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+      STORAGE_DRIVER: local
+      LOG_LEVEL: silent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Test
+        run: npm test
+
+      # Last, because it is the slowest and the least likely to be the thing
+      # that is broken.
+      - name: Build
+        run: npm run build

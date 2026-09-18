@@ -3,5 +3,9 @@ coverage
 node_modules
 package-lock.json
 backend/prisma/migrations
-# Verbatim prototype code — reformatting a quotation makes it a paraphrase.
-docs/reference
+
+# Prose, hand-wrapped for readability and reviewed as writing rather than as code.
+# Prettier's markdown reflow would rewrite every table and paragraph in docs/ for no
+# benefit and bury real edits in whitespace churn.
+docs
+*.md

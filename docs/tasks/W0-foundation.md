@@ -63,12 +63,19 @@ Make the repo a place where the rest of phase 1 can be built safely. No product 
 
 ## Acceptance criteria
 
-- [ ] `npm run lint`, `npm run type-check`, `npm test`, `npm run build` all pass at root
-- [ ] CI green on a PR
-- [ ] Boot fails loudly with a clear message when a required env var is missing
-- [ ] No `console.log` in `backend/src`
-- [ ] Round-trip unit test for crypto; storage driver test against the local driver
-- [ ] Sessions survive a server restart
+- [x] `npm run lint`, `npm run type-check`, `npm test`, `npm run build` all pass at root
+- [x] CI green on a PR — `.github/workflows/ci.yml`, with a Postgres service and a
+      `format:check` step added beyond the four gates
+- [x] Boot fails loudly with a clear message when a required env var is missing —
+      `platform/boot.ts` prints every problem at once, deduped and sorted, and exits 1;
+      covered by `platform/config.test.ts`
+- [x] No `console.log` in `backend/src` — ESLint `no-console` enforces it; the only
+      remaining occurrences are prose in comments describing what was removed
+- [x] Round-trip unit test for crypto; storage driver test against the local driver —
+      `platform/crypto.test.ts` (round trip, tamper detection, key rotation, opaque
+      failure) and `platform/storage.test.ts` (put/get, signed URL expiry and forgery)
+- [x] Sessions survive a server restart — `connect-pg-simple` backs the session store;
+      the prototype's MemoryStore lost every session on deploy
 
 ## Out of scope
 

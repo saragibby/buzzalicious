@@ -17,7 +17,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (isPending) {
-    return <div className="app-loading" role="status" aria-live="polite">Loading…</div>;
+    return (
+      <div className="app-loading" role="status" aria-live="polite">
+        Loading…
+      </div>
+    );
   }
 
   if (!user) {
