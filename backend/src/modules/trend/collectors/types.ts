@@ -15,9 +15,12 @@ import type { Platform, TrendKind } from '@prisma/client';
  *    Copying other people's posts into our database is both a ToS problem and not
  *    something the scorer can use.
  *
- * Automated collectors additionally resolve credentials in `PLATFORM_APP` mode only and
- * must never fall back to a client credential (docs/07, ADR-0009) — trend data is
- * cross-tenant by nature, and collecting it on a client's quota degrades their publishing.
+ * Automated collectors additionally resolve credentials through `resolveCollectorCredential`
+ * (`modules/publish/credential.resolver`), which hands back Buzzalicious's own app and
+ * **cannot** reach a client's — it takes no database handle, so the constraint in docs/07
+ * and ADR-0009 is enforced by the signature rather than left to memory. Never call
+ * `resolveCredential` from a collector: it runs the full brand → workspace → platform
+ * fallback, and collecting on a client's quota degrades the publishing they pay for.
  */
 export interface TrendCollector {
   readonly id: string;

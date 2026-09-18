@@ -6,6 +6,22 @@ import { getLogger } from '../../platform/logger';
 import type { ResolvedCredential } from './adapter.types';
 
 /**
+ * Buzzalicious's own app credentials, carrying no tenant.
+ *
+ * Deliberately **not** a `ResolvedCredential`: that type requires a `workspaceId`, and a
+ * collector has no workspace to name. Keeping them distinct means a collector credential
+ * cannot be passed to a publishing path, nor a client's to a collector, without the
+ * compiler objecting. Defined here rather than in `adapter.types.ts` because nothing that
+ * publishes should have a reason to import it.
+ */
+export interface CollectorCredential {
+  readonly mode: 'PLATFORM_APP';
+  readonly platform: Platform;
+  readonly appId: string;
+  /** Decrypted. Hold for the duration of the call and no longer. Never log it. */
+  readonly appSecret: string;
+}
+/**
  * The `CredentialResolver` — **the only path to credentials** (docs/10).
  *
  * No adapter, job or route reads an app secret any other way. That is not a style
@@ -211,6 +227,46 @@ function resolvePlatformApp(
     redirectUri: getConfig().publish.callbackUrl(platform),
     grantedScopes: [],
   };
+}
+
+/**
+ * Buzzalicious's own app credentials, for cross-tenant work that belongs to no client.
+ *
+ * ## Why this is a separate function and not a flag
+ *
+ * docs/07 and ADR-0009 both say a trend collector must resolve in `PLATFORM_APP` mode and
+ * **never** fall back to a client credential. Until now that rule lived only in prose, and
+ * `resolveCredential` — the obvious function to reach for — runs the full
+ * brand → workspace → platform chain. The first automated collector to call it would have
+ * silently published research traffic on a client's app: no error, no failing test, and
+ * the damage invisible until that client's own publishing started hitting a quota it had
+ * not spent. Instagram hashtag search is capped per *token*, so the collector and the
+ * client draw down the same budget.
+ *
+ * **This function takes no `Db`.** That is the entire design. A rule enforced by an
+ * argument that isn't there cannot be forgotten, misread, or regressed by someone adding a
+ * fallback in good faith — where a boolean option would be one `true` away from the bug it
+ * was meant to prevent.
+ *
+ * Two reasons the separation matters, both from docs/07:
+ *
+ * 1. **Quota.** Collecting on a client's app degrades the publishing they pay for.
+ * 2. **Tenancy.** Trend data is cross-tenant by nature. Observations gathered through Rise
+ *    & Shore's app would be scored and shown to Tax Dedux — a credential crossing the
+ *    boundary that the rest of this codebase exists to hold.
+ */
+export function resolveCollectorCredential(platform: Platform): CollectorCredential {
+  const key = platformAppKey(platform);
+  const app = key ? getConfig().publish.platformApps[key] : undefined;
+
+  if (!app) {
+    throw new CredentialUnavailableError(
+      platform,
+      `Buzzalicious has no ${platform} app configured, so trend collection for ${platform} cannot run. Set PLATFORM_APP_* config vars. A collector deliberately cannot borrow a client's credentials (docs/07, ADR-0009).`,
+    );
+  }
+
+  return { mode: 'PLATFORM_APP', platform, appId: app.appId, appSecret: app.appSecret };
 }
 
 function toResolved(credential: PlatformCredential): ResolvedCredential {
