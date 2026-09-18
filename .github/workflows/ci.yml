@@ -46,10 +46,13 @@ jobs:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/buzzalicious_test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
+          # The floor from package.json engines, not the newest release. CI should
+          # fail on the oldest version we claim to support, not the one that happens
+          # to be on a developer's machine.
           node-version: 20
           cache: npm
 
