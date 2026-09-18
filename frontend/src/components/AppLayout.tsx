@@ -6,6 +6,7 @@ import logo from '../logo.png';
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
+  { to: '/trends', label: 'Trends' },
   { to: '/composer', label: 'Composer' },
   { to: '/calendar', label: 'Calendar' },
   { to: '/insights', label: 'Insights' },

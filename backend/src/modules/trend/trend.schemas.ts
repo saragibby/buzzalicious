@@ -41,3 +41,178 @@ export const TrendSignalMetricsSchema = z
   .passthrough();
 
 export type TrendSignalMetrics = z.infer<typeof TrendSignalMetricsSchema>;
+
+/**
+ * Reads the comparable volume out of one observation.
+ *
+ * `TrendSignalMetricsSchema` names the field `volume`, but W2's seed writes `mentions` and
+ * the collectors in docs/07 will each have their own vocabulary. Rather than normalize on
+ * write — which would mean discarding whatever the source actually called it, and docs/07
+ * is explicit that the raw payload must survive so scoring can be re-run — the scorer
+ * accepts the known aliases on read.
+ *
+ * Returns `null`, never 0, when an observation carries no volume at all. A collector that
+ * reports engagement but not volume has not observed a volume of zero, and treating it as
+ * one would invent a cliff in the velocity series.
+ */
+export function volumeOf(metrics: unknown): number | null {
+  if (typeof metrics !== 'object' || metrics === null) return null;
+  const record = metrics as Record<string, unknown>;
+
+  for (const key of ['volume', 'mentions', 'postCount', 'posts'] as const) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  }
+  return null;
+}
+
+/** Same aliasing problem, same treatment. `engagements` is what the seed writes. */
+export function engagementOf(metrics: unknown): number | null {
+  if (typeof metrics !== 'object' || metrics === null) return null;
+  const record = metrics as Record<string, unknown>;
+
+  for (const key of ['engagement', 'engagements'] as const) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  }
+  return null;
+}
+
+// ─── Curation and category mapping (W9) ──────────────────────────────────────────
+//
+// Both of these live inside `Trend.raw` under reserved keys rather than in columns of
+// their own. `schema.prisma` is owned by W2 and is not editable from this workstream, and
+// `TrendRawSchema` is `.passthrough()` by design, so namespacing is the available move.
+//
+// It is a compromise, not a preference: `raw` means "what the collector observed", and
+// curation output plus mapping provenance are neither. The follow-up recorded for W2 is a
+// `Trend.curation Json?` column and `confidence` / `method` / `reviewStatus` on
+// `TrendCategoryScore`. Everything here reads and writes through the helpers below, so
+// that migration touches this file and nothing else.
+
+export const SUGGESTED_ANGLE_MAX = 400;
+
+/**
+ * A concrete thing a business in this category could actually post this week.
+ *
+ * This is the acceptance criterion the brief singles out: a trend without a usable idea
+ * attached is just noise. So `angle` is prose a person could act on, not a label — the
+ * minimum length is there to stop "post about pumpkin spice" passing for an angle.
+ */
+export const SuggestedAngleSchema = z
+  .object({
+    categorySlug: z.string().min(1),
+    angle: z.string().min(20).max(SUGGESTED_ANGLE_MAX),
+    /** Optional first line of copy. The angle is the idea; this is the execution. */
+    hook: z.string().max(200).optional(),
+  })
+  .strict();
+
+export type SuggestedAngle = z.infer<typeof SuggestedAngleSchema>;
+
+export const TrendCurationSchema = z
+  .object({
+    /** Who curated it. An email or a handle — this is an internal audit trail. */
+    curatedBy: z.string().min(1).optional(),
+    curatedAt: z.string().datetime().optional(),
+    /** Why this is worth a small business's week. Shown to curators, not to end users. */
+    rationale: z.string().max(1000).optional(),
+    angles: z.array(SuggestedAngleSchema).default([]),
+    /** Falls back to `angles` when a brand's category has no specific one. */
+    defaultAngle: z.string().min(20).max(SUGGESTED_ANGLE_MAX).optional(),
+  })
+  .strict();
+
+export type TrendCuration = z.infer<typeof TrendCurationSchema>;
+
+export const MAPPING_METHODS = ['rules', 'llm', 'manual'] as const;
+export type MappingMethod = (typeof MAPPING_METHODS)[number];
+
+export const MAPPING_REVIEW_STATUSES = ['OK', 'NEEDS_REVIEW', 'CONFIRMED', 'REJECTED'] as const;
+export type MappingReviewStatus = (typeof MAPPING_REVIEW_STATUSES)[number];
+
+/**
+ * How one trend was mapped onto the taxonomy, and how much we trust it.
+ *
+ * `TrendCategoryScore` stores the score; this stores everything needed to explain or
+ * distrust it. `evidence` is not decoration — it is what the feed turns into "why this
+ * fits you", and a mapping that cannot say why it matched is one the user has no reason
+ * to believe.
+ */
+export const TrendCategoryMappingSchema = z
+  .object({
+    method: z.enum(MAPPING_METHODS),
+    /** 0..1. Below `NEEDS_REVIEW_BELOW` the mapping is withheld from the feed. */
+    confidence: z.number().min(0).max(1),
+    reviewStatus: z.enum(MAPPING_REVIEW_STATUSES).default('OK'),
+    mappedAt: z.string().datetime(),
+    /**
+     * Cache key covering the inputs a mapping depends on. Changing a trend's title or
+     * bumping the rules version invalidates it; adding a brand does not. This is what
+     * makes the cache per trend rather than per brand.
+     */
+    inputHash: z.string().min(1),
+    /** Per category, in the order the feed should cite them. */
+    evidence: z
+      .array(
+        z
+          .object({
+            categorySlug: z.string().min(1),
+            score: z.number().min(0).max(1),
+            /** Human-readable: the matched terms, or the model's stated reason. */
+            reason: z.string().min(1).max(300),
+          })
+          .strict(),
+      )
+      .default([]),
+    reviewedBy: z.string().min(1).optional(),
+    reviewedAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export type TrendCategoryMapping = z.infer<typeof TrendCategoryMappingSchema>;
+
+/** The reserved `Trend.raw` keys. Anything else in `raw` is the collector's. */
+export const CURATION_KEY = 'curation';
+export const MAPPING_KEY = 'categoryMapping';
+
+export const TrendRawWithW9Schema = TrendRawSchema.extend({
+  [CURATION_KEY]: TrendCurationSchema.optional(),
+  [MAPPING_KEY]: TrendCategoryMappingSchema.optional(),
+});
+
+function rawRecord(raw: unknown): Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * Reads a namespaced section out of `Trend.raw`.
+ *
+ * Returns `undefined` rather than throwing on malformed data. `raw` is permissive by
+ * contract and may hold anything a collector wrote, including from a future version of
+ * this code — a feed that 500s because one trend has an unexpected shape is a worse
+ * outcome than a feed missing one trend.
+ */
+export function readCuration(raw: unknown): TrendCuration | undefined {
+  const parsed = TrendCurationSchema.safeParse(rawRecord(raw)[CURATION_KEY]);
+  return parsed.success ? parsed.data : undefined;
+}
+
+export function readCategoryMapping(raw: unknown): TrendCategoryMapping | undefined {
+  const parsed = TrendCategoryMappingSchema.safeParse(rawRecord(raw)[MAPPING_KEY]);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Merges a section into `raw`, preserving every collector field already there. */
+export function writeCuration(raw: unknown, curation: TrendCuration): Record<string, unknown> {
+  return { ...rawRecord(raw), [CURATION_KEY]: TrendCurationSchema.parse(curation) };
+}
+
+export function writeCategoryMapping(
+  raw: unknown,
+  mapping: TrendCategoryMapping,
+): Record<string, unknown> {
+  return { ...rawRecord(raw), [MAPPING_KEY]: TrendCategoryMappingSchema.parse(mapping) };
+}

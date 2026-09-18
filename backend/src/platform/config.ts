@@ -98,6 +98,14 @@ const baseSchema = z.object({
   AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
   AZURE_OPENAI_API_VERSION: z.string().optional(),
 
+  /**
+   * Who may curate the global trend feed (W9). Deliberately the inverse of
+   * `ALLOWED_EMAILS`: empty denies everyone rather than allowing everyone. Trend curation
+   * writes platform-global rows that every workspace reads, so an unset variable must fail
+   * closed — the cost of a wrong default here is one client's typo reaching every tenant.
+   */
+  TREND_ADMIN_EMAILS: csv.default(''),
+
   /** Opt-in Postgres for DB-backed integration tests. See docs/12-testing.md. */
   TEST_DATABASE_URL: z.string().optional(),
 });
@@ -165,6 +173,11 @@ const schema = baseSchema
     },
 
     workerEnabled: env.WORKER_ENABLED,
+
+    trend: {
+      /** Empty means nobody. See the note on TREND_ADMIN_EMAILS above. */
+      adminEmails: env.TREND_ADMIN_EMAILS,
+    },
 
     storage: {
       driver: env.STORAGE_DRIVER,

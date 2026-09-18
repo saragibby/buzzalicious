@@ -10,6 +10,8 @@ import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { createAuthRouter } from './routes/auth.routes';
 import { createHealthRouter } from './routes/health.routes';
 import { createFilesRouter, shouldMountFilesRouter } from './routes/files.routes';
+import { createTrendRouter } from './routes/trend.routes';
+import { createTrendAdminRouter } from './routes/trend-admin.routes';
 
 /**
  * Builds the Express application. Deliberately separate from `index.ts` so tests can
@@ -73,6 +75,11 @@ export function createApp(): Application {
 
   app.use('/api/health', createHealthRouter());
   app.use('/auth', createAuthRouter(passport));
+
+  // W9. The feed is per-brand and read-only; curation writes platform-global rows and is
+  // gated separately by TREND_ADMIN_EMAILS inside its own router.
+  app.use('/api/trends', createTrendRouter());
+  app.use('/api/admin/trends', createTrendAdminRouter());
 
   if (shouldMountFilesRouter()) {
     app.use('/api/files', createFilesRouter());
