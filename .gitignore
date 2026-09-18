@@ -140,3 +140,7 @@ vite.config.ts.timestamp-*
 
 # macOS
 .DS_Store
+
+# Local object storage (STORAGE_DRIVER=local). Development only — Heroku's filesystem
+# is ephemeral, so production uses R2.
+.storage/

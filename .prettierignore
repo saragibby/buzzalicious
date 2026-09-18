@@ -1,0 +1,7 @@
+dist
+coverage
+node_modules
+package-lock.json
+backend/prisma/migrations
+# Verbatim prototype code — reformatting a quotation makes it a paraphrase.
+docs/reference

@@ -80,24 +80,16 @@ export class TwitterService {
    * Generate OAuth 1.0a authorization URL
    */
   static async generateAuthUrl(callbackUrl: string): Promise<{ url: string; oauth_token: string; oauth_token_secret: string }> {
-    try {
-      const client = new TwitterApi({
-        appKey: process.env.TWITTER_API_KEY!,
-        appSecret: process.env.TWITTER_API_SECRET!,
-      });
+    // W6: the prototype wrapped this in a try/catch that logged the provider's error
+    // detail to the console and rethrew unchanged. The replacement should raise an
+    // ExternalServiceError carrying the cause, so the error handler logs the detail
+    // server-side and the client is told nothing.
+    const client = new TwitterApi({
+      appKey: process.env.TWITTER_API_KEY!,
+      appSecret: process.env.TWITTER_API_SECRET!,
+    });
 
-      console.log('Generating Twitter auth link with callback:', callbackUrl);
-      const authLink = await client.generateAuthLink(callbackUrl);
-      console.log('Successfully generated auth link');
-      return authLink;
-    } catch (error: any) {
-      console.error('Twitter API Error Details:', {
-        message: error.message,
-        code: error.code,
-        data: error.data,
-      });
-      throw error;
-    }
+    return client.generateAuthLink(callbackUrl);
   }
 
   /**

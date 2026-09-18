@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Set here, not in tsconfig.json: type-check spans src/ and tests/, but the build
+    // must emit dist/index.js rather than dist/src/index.js.
+    "rootDir": "./src"
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "tests"]
+}

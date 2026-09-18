@@ -10,7 +10,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getConfig, type Config } from './config';
+import { ConfigError, getConfig, type Config } from './config';
 import { safeEqual } from './crypto';
 import { NotFoundError, ValidationError } from './errors';
 
@@ -250,9 +250,9 @@ export function createStorageDriver(config: Config = getConfig()): StorageDriver
   }
 
   if (config.isProduction) {
-    throw new Error(
-      'Refusing to use the local storage driver in production: the dyno filesystem is ephemeral.',
-    );
+    throw new ConfigError([
+      'STORAGE_DRIVER: refusing to use the local driver in production — the dyno filesystem is ephemeral.',
+    ]);
   }
 
   return new LocalStorageDriver(

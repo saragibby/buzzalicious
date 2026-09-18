@@ -1,42 +1,54 @@
-import { useEffect, useState } from 'react'
-import logo from './logo.png'
-import { getBackendUrl } from './utils/api'
-
-interface User {
-  id: string
-  email: string
-  name: string | null
-  picture: string | null
-}
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AppLayout } from './components/AppLayout';
+import { RequireAuth } from './components/RequireAuth';
+import { Login } from './routes/Login';
+import { Calendar, Composer, Dashboard, Insights, NotFound, Settings } from './routes/Placeholder';
 
 /**
- * Placeholder shell. Replaced by the React Router + TanStack Query shell in W1 step 5.
+ * The routing shell. Structure only — W5 builds the real UI.
+ *
+ * This replaces the prototype's `useState` tab index, which meant no URL was shareable,
+ * the back button did nothing, and a refresh always dropped the user on tab zero.
  */
-function App() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // The API is the source of truth and a refetch is cheap; refetching on every window
+      // focus is not, and it makes rate limits harder to reason about.
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
 
-  useEffect(() => {
-    fetch(`${getBackendUrl()}/auth/me`, { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return <p>Loading…</p>
-
+export function App() {
   return (
-    <main>
-      <img src={logo} alt="Buzzalicious" width={64} />
-      <h1>Buzzalicious</h1>
-      {user ? (
-        <p>Signed in as {user.name ?? user.email}</p>
-      ) : (
-        <a href={`${getBackendUrl()}/auth/google`}>Sign in with Google</a>
-      )}
-    </main>
-  )
+    <QueryClientProvider client={queryClient}>
+      {/* Opt in to the v7 behaviours now so the eventual upgrade is not a behaviour change. */}
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            element={
+              <RequireAuth>
+                <AppLayout />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="composer" element={<Composer />} />
+            <Route path="calendar" element={<Calendar />} />
+            <Route path="insights" element={<Insights />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+          <Route path="/404" element={<NotFound />} />
+          <Route path="*" element={<Navigate to="/404" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
+  );
 }
 
-export default App
+export default App;
